@@ -1,0 +1,1 @@
+ALTER TABLE public.sites ADD COLUMN default_wordpress_author_id integer;

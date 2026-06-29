@@ -1,0 +1,1 @@
+ALTER TABLE public.crm_products ADD COLUMN IF NOT EXISTS qbo_item_name TEXT;

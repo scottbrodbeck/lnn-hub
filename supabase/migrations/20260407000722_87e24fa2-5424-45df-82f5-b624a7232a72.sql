@@ -1,0 +1,1 @@
+ALTER TABLE public.email_blasts ADD COLUMN preview_text text;

@@ -1,0 +1,109 @@
+project_id = "nsqosbysixcjcwkdpajk"
+
+[functions.generate-post-interview]
+verify_jwt = false
+
+[functions.notify-admins]
+verify_jwt = false
+
+[functions.generate-social-posts]
+verify_jwt = false
+
+[functions.create-crowdsignal-poll]
+verify_jwt = false
+
+[functions.update-crowdsignal-poll]
+verify_jwt = false
+
+[functions.delete-crowdsignal-poll]
+verify_jwt = false
+
+[functions.send-user-notification]
+verify_jwt = false
+
+[functions.check-due-reminders]
+verify_jwt = false
+
+[functions.seed-test-drafts]
+verify_jwt = false
+
+[functions.optimize-animated-image]
+verify_jwt = false
+
+[functions.optimize-video]
+verify_jwt = false
+
+[functions.process-image-background]
+verify_jwt = false
+
+[functions.process-and-store-image]
+verify_jwt = false
+
+[functions.email-hook]
+verify_jwt = false
+
+[functions.send-custom-otp]
+verify_jwt = false
+
+[functions.verify-custom-otp]
+verify_jwt = false
+
+[functions.create-beehiiv-draft]
+verify_jwt = false
+
+[functions.broadstreet-api]
+verify_jwt = false
+
+[functions.get-beehiiv-stats]
+verify_jwt = false
+
+[functions.create-mailchimp-campaign]
+verify_jwt = false
+
+[functions.get-mailchimp-stats]
+verify_jwt = false
+
+[functions.analyze-subject-line]
+verify_jwt = false
+
+[functions.upload-display-ad-image]
+verify_jwt = false
+
+[functions.cleanup-orphaned-images]
+verify_jwt = false
+
+[functions.check-url]
+verify_jwt = false
+
+[functions.slack-list-channels]
+verify_jwt = false
+
+[functions.slack-notify]
+verify_jwt = false
+
+[functions.manage-sponsor]
+verify_jwt = false
+
+[functions.qa-agent]
+verify_jwt = false
+
+[functions.media-library]
+verify_jwt = false
+
+[functions.test-email]
+verify_jwt = false
+
+[functions.hubspot-archive-reconcile]
+verify_jwt = false
+
+[functions.client-lookup]
+verify_jwt = false
+
+[functions.mcp-server]
+verify_jwt = false
+
+[functions.check-unscheduled-assignments]
+verify_jwt = false
+
+[functions.qbo-oauth]
+verify_jwt = false

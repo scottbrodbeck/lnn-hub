@@ -1,0 +1,1 @@
+ALTER TABLE public.qa_checks ADD COLUMN is_dismissed boolean NOT NULL DEFAULT false;

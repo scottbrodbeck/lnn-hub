@@ -1,0 +1,1 @@
+ALTER TABLE public.crm_import_staging ADD COLUMN IF NOT EXISTS previous_batch_id uuid;

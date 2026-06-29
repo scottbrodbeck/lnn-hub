@@ -1,0 +1,1 @@
+ALTER TABLE public.column_templates ADD COLUMN footer_paragraph text NULL DEFAULT NULL;

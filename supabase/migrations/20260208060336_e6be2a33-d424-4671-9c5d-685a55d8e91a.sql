@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS public.debug_paste_logs;

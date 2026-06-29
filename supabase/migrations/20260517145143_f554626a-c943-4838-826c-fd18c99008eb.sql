@@ -1,0 +1,1 @@
+ALTER TABLE public.crm_products DROP COLUMN IF EXISTS qbo_sync_enabled;

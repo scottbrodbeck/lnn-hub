@@ -1,0 +1,1 @@
+ALTER TABLE public.display_ad_placements ADD COLUMN click_url text;

@@ -1,0 +1,15 @@
+ALTER TABLE public.post_edit_requests
+  ADD COLUMN IF NOT EXISTS old_author_bio text,
+  ADD COLUMN IF NOT EXISTS new_author_bio text,
+  ADD COLUMN IF NOT EXISTS old_author_photo_url text,
+  ADD COLUMN IF NOT EXISTS new_author_photo_url text,
+  ADD COLUMN IF NOT EXISTS old_logo_url text,
+  ADD COLUMN IF NOT EXISTS new_logo_url text,
+  ADD COLUMN IF NOT EXISTS old_logo_link_url text,
+  ADD COLUMN IF NOT EXISTS new_logo_link_url text,
+  ADD COLUMN IF NOT EXISTS old_logo_author_name text,
+  ADD COLUMN IF NOT EXISTS new_logo_author_name text,
+  ADD COLUMN IF NOT EXISTS old_cta_button_text text,
+  ADD COLUMN IF NOT EXISTS new_cta_button_text text,
+  ADD COLUMN IF NOT EXISTS old_cta_button_url text,
+  ADD COLUMN IF NOT EXISTS new_cta_button_url text;

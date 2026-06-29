@@ -1,0 +1,19 @@
+User-agent: Googlebot
+Allow: /
+Disallow: /legal/
+
+User-agent: Bingbot
+Allow: /
+Disallow: /legal/
+
+User-agent: Twitterbot
+Allow: /
+Disallow: /legal/
+
+User-agent: facebookexternalhit
+Allow: /
+Disallow: /legal/
+
+User-agent: *
+Allow: /
+Disallow: /legal/

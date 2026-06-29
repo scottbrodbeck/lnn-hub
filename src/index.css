@@ -1,0 +1,233 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 213 15% 20%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 213 15% 20%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 213 15% 20%;
+
+    --primary: 214 100% 41%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 213 19% 96%;
+    --secondary-foreground: 213 15% 20%;
+
+    --muted: 213 19% 96%;
+    --muted-foreground: 213 10% 50%;
+
+    --accent: 210 100% 95%;
+    --accent-foreground: 214 100% 41%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 213 27% 84%;
+    --input: 213 27% 84%;
+    --ring: 214 100% 41%;
+
+    --radius: 0.375rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 213 20% 12%;
+    --foreground: 213 10% 95%;
+
+    --card: 213 20% 15%;
+    --card-foreground: 213 10% 95%;
+
+    --popover: 213 20% 15%;
+    --popover-foreground: 213 10% 95%;
+
+    --primary: 214 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 213 20% 20%;
+    --secondary-foreground: 213 10% 95%;
+
+    --muted: 213 20% 20%;
+    --muted-foreground: 213 10% 65%;
+
+    --accent: 213 20% 25%;
+    --accent-foreground: 214 100% 50%;
+
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 213 20% 25%;
+    --input: 213 20% 25%;
+    --ring: 214 100% 50%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* React Big Calendar custom styles */
+.rbc-calendar {
+  font-family: inherit;
+}
+
+.rbc-header {
+  padding: 12px 4px;
+  font-weight: 600;
+  border-bottom: 2px solid hsl(var(--border));
+  background: hsl(var(--muted));
+}
+
+.rbc-today {
+  background-color: hsl(var(--accent));
+}
+
+.rbc-off-range-bg {
+  background-color: hsl(var(--muted) / 0.3);
+}
+
+.rbc-event {
+  padding: 1px 4px;
+  font-size: 0.75rem;
+  line-height: 1.1;
+  margin-bottom: 1px;
+  cursor: pointer;
+}
+
+.rbc-event:hover {
+  opacity: 0.8;
+}
+
+.rbc-toolbar button {
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+
+.rbc-toolbar button:hover {
+  background: hsl(var(--accent));
+}
+
+.rbc-toolbar button.rbc-active {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-color: hsl(var(--primary));
+}
+
+.rbc-month-view, .rbc-time-view, .rbc-agenda-view {
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rbc-month-view {
+  min-width: 850px;
+}
+
+.rbc-header {
+  min-width: 0;
+}
+
+/* Increased day cell height for better visibility */
+.rbc-month-row {
+  min-height: 140px;
+}
+
+.rbc-day-slot {
+  min-height: 120px;
+}
+
+/* Popup/Overlay styles for "+X more" feature */
+.rbc-overlay {
+  background: hsl(var(--popover));
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  padding: 8px;
+  z-index: 50;
+}
+
+.rbc-overlay-header {
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 8px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.rbc-show-more {
+  color: hsl(var(--primary));
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px;
+  background: hsl(var(--background));
+  border-radius: 4px;
+  margin-top: 2px;
+}
+
+.rbc-show-more:hover {
+  background: hsl(var(--accent));
+}
+
+/* Drag and Drop styles */
+.rbc-addons-dnd .rbc-addons-dnd-over {
+  background-color: hsl(var(--accent)) !important;
+}
+
+.rbc-addons-dnd-dragging {
+  opacity: 0.7;
+  cursor: move !important;
+}
+
+.rbc-event.rbc-addons-dnd-dragged-event {
+  opacity: 0;
+}
+
+.rbc-addons-dnd .rbc-event {
+  cursor: move;
+}
+
+.rbc-addons-dnd-resizable {
+  cursor: ew-resize;
+}
+

@@ -1,0 +1,1 @@
+ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS blanket_discount_pct numeric NOT NULL DEFAULT 0;
