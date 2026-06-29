@@ -71,7 +71,7 @@ serve(async (req) => {
     }
 
     // Build magic link URL
-    const siteUrl = Deno.env.get("SITE_URL") || "https://nsqosbysixcjcwkdpajk.lovableproject.com";
+    const siteUrl = Deno.env.get("SITE_URL") || "https://client.lnn.co";
     const magicLink = `${siteUrl}/auth?token=${token}&email=${encodeURIComponent(email.toLowerCase())}`;
 
     // Send email with SendGrid

@@ -1548,7 +1548,7 @@ serve(async (req) => {
 
             // Determine base URL from request origin or fallback
             const origin = req.headers.get('origin') || req.headers.get('referer')?.replace(/\/+$/, '') || '';
-            const baseUrl = origin || `https://${Deno.env.get('SUPABASE_URL')?.replace('https://', '').split('.')[0]}.lovable.app`;
+            const baseUrl = origin || Deno.env.get('SITE_URL') || 'https://client.lnn.co';
 
             for (const orgUser of orgUsers || []) {
               try {

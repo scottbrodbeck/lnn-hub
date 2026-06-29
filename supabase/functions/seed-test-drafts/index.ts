@@ -1,3 +1,11 @@
+// ⚠️ DEFERRED — NOT migrated off Lovable (Milestone 1).
+// This admin-only utility seeds fake draft posts with AI-GENERATED IMAGES via the
+// Lovable AI gateway (google/gemini-2.5-flash-image-preview). The Claude API does
+// not generate images, so there is no drop-in replacement. Off Lovable this function
+// is inert: LOVABLE_API_KEY won't be set, so generateImage() fails fast. It only runs
+// when an admin clicks "seed test drafts" on a site — not a production path.
+// TODO(image-provider): repoint generateImage() to a dedicated image API
+// (e.g. OpenAI gpt-image-1 or Google) + add that provider's key, then re-enable.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
 
