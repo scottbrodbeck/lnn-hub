@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { callClaudeText, ClaudeRateLimitError } from "../_shared/claude.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -43,11 +44,6 @@ serve(async (req) => {
 
   try {
     const { headline, content = '', siteName, style } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
-    }
 
     const textContent = extractSocialTextFromHtml(content);
     const openingSentence = extractFirstSentence(textContent);
@@ -82,28 +78,11 @@ Article body for context: ${textContent.substring(0, 1500)}
 
 Return ONLY the 6 posts, one per line. No numbering, no bullet points, no extra text.`;
 
-      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-        }),
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`AI API error: ${response.status} ${errText}`);
-      }
-
-      const data = await response.json();
-      const rawText = data.choices[0].message.content.trim();
+      const rawText = (await callClaudeText({
+        system: systemPrompt,
+        user: userPrompt,
+        maxTokens: 1024,
+      })).trim();
       const posts = rawText.split('\n').filter((post: string) => post.trim().length > 5);
 
       const suggestions = posts.slice(0, 6).map((text: string) => ({
@@ -141,27 +120,12 @@ Headline: ${headline}
 Opening sentence: ${openingSentence}
 Content: ${textContent.substring(0, 1200)}`;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt }
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`AI API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const posts = data.choices[0].message.content.trim().split('\n').filter((post: string) => post.trim().length > 5);
+    const rawText = (await callClaudeText({
+      system: systemPrompt,
+      user: prompt,
+      maxTokens: 1024,
+    })).trim();
+    const posts = rawText.split('\n').filter((post: string) => post.trim().length > 5);
     const suggestions = posts.slice(0, 5).map((text: string) => ({
       id: crypto.randomUUID(),
       text: text.trim().replace(/^\d+[\.\)]\s*/, ''),
@@ -183,8 +147,7 @@ Content: ${textContent.substring(0, 1200)}`;
     console.error('Error in generate-social-posts:', error);
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const status = errorMessage.includes('rate limit') ? 429 :
-                   errorMessage.includes('payment') ? 402 : 500;
+    const status = error instanceof ClaudeRateLimitError ? 429 : 500;
 
     return new Response(
       JSON.stringify({

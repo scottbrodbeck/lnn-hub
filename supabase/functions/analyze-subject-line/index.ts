@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { callClaudeTool, toClaudeTool, dataUriToImageBlock, ClaudeRateLimitError } from "../_shared/claude.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -83,12 +84,7 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
-    const systemPrompt = `You are a copy editor for ${siteName} and its sister local news sites. 
+    const systemPrompt = `You are a copy editor for ${siteName} and its sister local news sites.
 Your task is to edit subject lines for sponsored email blasts so that they match 
 the editorial tone and standards of these publications.
 
@@ -176,65 +172,34 @@ Please evaluate whether this subject line meets ${siteName}'s editorial standard
     }
 
     // Build the user message — multimodal (with image) or text-only
-    let userMessage: any;
+    const userContent: any[] = [{ type: "text", text: userPrompt }];
     if (imageDataUrl) {
-      userMessage = {
-        role: "user",
-        content: [
-          { type: "text", text: userPrompt },
-          { type: "image_url", image_url: { url: imageDataUrl } }
-        ]
-      };
-    } else {
-      userMessage = { role: "user", content: userPrompt };
+      try {
+        userContent.push(dataUriToImageBlock(imageDataUrl));
+      } catch (_err) {
+        console.warn("Image block conversion failed; proceeding text-only");
+      }
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          userMessage
-        ],
-        tools,
-        tool_choice: { type: "function", function: { name: "analyze_subject_line" } }
-      }),
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
+    let result: AnalysisResult;
+    try {
+      result = await callClaudeTool<AnalysisResult>({
+        system: systemPrompt,
+        messages: [{ role: "user", content: userContent }],
+        tool: toClaudeTool(tools[0].function),
+        maxTokens: 1024,
+      });
+    } catch (err) {
+      if (err instanceof ClaudeRateLimitError) {
         return new Response(
           JSON.stringify({ error: "Rate limits exceeded, please try again later." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required, please add funds to your Lovable AI workspace." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      // Graceful fallback preserves prior behavior: 200 with the original line.
+      console.error("Subject-line analysis failed:", err);
       return new Response(
-        JSON.stringify({ error: "AI gateway error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const aiResponse = await response.json();
-    
-    // Extract the tool call result
-    const toolCall = aiResponse.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall || toolCall.function.name !== "analyze_subject_line") {
-      console.error("Unexpected AI response structure:", JSON.stringify(aiResponse));
-      return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           error: "Unexpected AI response",
           needsEditing: false,
           editedSubjectLine: subjectLine,
@@ -244,8 +209,6 @@ Please evaluate whether this subject line meets ${siteName}'s editorial standard
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const result: AnalysisResult = JSON.parse(toolCall.function.arguments);
 
     // Ensure we have exactly 3 alternatives
     if (!result.alternatives || result.alternatives.length < 3) {
