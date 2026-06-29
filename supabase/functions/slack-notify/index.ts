@@ -3,7 +3,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/slack/api';
+// Direct Slack Web API (was the Lovable connector gateway).
+const GATEWAY_URL = 'https://slack.com/api';
 
 interface SlackNotifyPayload {
   channel: string;
@@ -183,11 +184,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY is not configured');
-
-    const SLACK_API_KEY = Deno.env.get('SLACK_API_KEY');
-    if (!SLACK_API_KEY) throw new Error('SLACK_API_KEY is not configured');
+    const SLACK_BOT_TOKEN = Deno.env.get('SLACK_BOT_TOKEN');
+    if (!SLACK_BOT_TOKEN) throw new Error('SLACK_BOT_TOKEN is not configured');
 
     const payload: SlackNotifyPayload = await req.json();
     console.log(`Sending Slack notification: ${payload.event_type} to channel ${payload.channel}`);
@@ -206,8 +204,7 @@ Deno.serve(async (req) => {
     });
 
     const slackHeaders = {
-      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-      'X-Connection-Api-Key': SLACK_API_KEY,
+      'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
       'Content-Type': 'application/json',
     };
 
@@ -233,7 +230,7 @@ Deno.serve(async (req) => {
       const isPrivate = infoData.ok && infoData.channel?.is_private;
 
       if (isPrivate) {
-        throw new Error(`The bot cannot auto-join private channels. Please invite the Lovable App bot to #${infoData.channel?.name || payload.channel} in Slack first.`);
+        throw new Error(`The bot cannot auto-join private channels. Please invite the LNN bot to #${infoData.channel?.name || payload.channel} in Slack first.`);
       }
 
       // Public channel — join it
