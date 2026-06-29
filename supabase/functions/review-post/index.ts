@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { callClaudeTool, toClaudeTool, ClaudeRateLimitError } from "../_shared/claude.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,11 +13,6 @@ serve(async (req) => {
 
   try {
     const { headline, content, authorName, currentDate, typosOnly, efficacyOnly } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
 
     console.log(`Reviewing post with AI... typosOnly=${typosOnly}, efficacyOnly=${efficacyOnly}`);
 
@@ -257,55 +253,12 @@ Provide a thorough review with specific, actionable suggestions.`;
       toolChoice = { type: "function", function: { name: "provide_review" } };
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools,
-        tool_choice: toolChoice,
-      }),
+    const reviewData = await callClaudeTool({
+      system: systemPrompt,
+      user: userPrompt,
+      tool: toClaudeTool(tools[0].function),
+      maxTokens: 4096,
     });
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        console.error("Rate limit exceeded");
-        return new Response(
-          JSON.stringify({ error: "rate_limit", message: "AI service rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        console.error("Payment required");
-        return new Response(
-          JSON.stringify({ error: "payment_required", message: "AI credits exhausted. Please add funds to continue." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      throw new Error(`AI gateway error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log("AI response received");
-
-    // Extract the tool call result
-    const toolCall = data.choices[0]?.message?.tool_calls?.[0];
-    const expectedToolName = typosOnly ? "provide_typos" : (efficacyOnly ? "provide_efficacy" : "provide_review");
-    
-    if (!toolCall || toolCall.function.name !== expectedToolName) {
-      throw new Error("Invalid AI response format");
-    }
-
-    const reviewData = JSON.parse(toolCall.function.arguments);
     
     // Override AI's headline length estimate with actual calculated value
     // AI is unreliable at counting characters, so we do it server-side
@@ -359,6 +312,12 @@ Provide a thorough review with specific, actionable suggestions.`;
   } catch (error) {
     console.error("Error in review-post function:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    if (error instanceof ClaudeRateLimitError) {
+      return new Response(
+        JSON.stringify({ error: "rate_limit", message: "AI service rate limit exceeded. Please try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     return new Response(
       JSON.stringify({ error: "internal_error", message: errorMessage }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

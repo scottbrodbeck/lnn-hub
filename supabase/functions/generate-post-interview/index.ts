@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { callClaudeTool, toClaudeTool, ClaudeRateLimitError } from "../_shared/claude.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -72,11 +73,6 @@ serve(async (req) => {
 
   try {
     const { type, conversationHistory, changeRequest, currentArticle, articleType, organization, organizationDescription } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
-    }
 
     let systemPrompt = '';
     let userPrompt = '';
@@ -247,52 +243,14 @@ Please revise the article according to their feedback while maintaining the enga
       toolChoice = { type: "function", function: { name: "provide_article" } };
     }
 
-    const messages = [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
-    ];
+    const maxTokens = (type === 'generate' || type === 'refine') ? 4096 : 1024;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages,
-        tools,
-        tool_choice: toolChoice
-      }),
+    const result = await callClaudeTool({
+      system: systemPrompt,
+      user: userPrompt,
+      tool: toClaudeTool(tools[0].function),
+      maxTokens,
     });
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: 'Rate limits exceeded. Please try again in a moment.' }), {
-          status: 429,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: 'Payment required. Please add credits to your workspace.' }), {
-          status: 402,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      const errorText = await response.text();
-      console.error('AI Gateway error:', response.status, errorText);
-      throw new Error('AI Gateway request failed');
-    }
-
-    const data = await response.json();
-    console.log('AI Response:', JSON.stringify(data, null, 2));
-
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) {
-      throw new Error('No tool call in response');
-    }
-
-    const result = JSON.parse(toolCall.function.arguments);
     
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -300,10 +258,11 @@ Please revise the article according to their feedback while maintaining the enga
 
   } catch (error) {
     console.error('Error in generate-post-interview:', error);
+    const status = error instanceof ClaudeRateLimitError ? 429 : 500;
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error occurred' }), 
       {
-        status: 500,
+        status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
