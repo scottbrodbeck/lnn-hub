@@ -1,7 +1,8 @@
-// Shared HubSpot gateway helpers for sync edge functions.
-// All requests go through the Lovable connector gateway.
+// Shared HubSpot API helpers for sync edge functions.
+// Calls the HubSpot CRM API directly (was the Lovable connector gateway).
+// HUBSPOT_API_KEY holds a HubSpot Private App access token (pat-...).
 
-export const GATEWAY_URL = "https://connector-gateway.lovable.dev/hubspot";
+export const GATEWAY_URL = "https://api.hubapi.com";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,11 +41,9 @@ export async function hsFetch<T = any>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   const HUBSPOT_API_KEY = Deno.env.get("HUBSPOT_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
   if (!HUBSPOT_API_KEY) {
-    throw new Error("HUBSPOT_API_KEY not configured (connect HubSpot)");
+    throw new Error("HUBSPOT_API_KEY not configured (HubSpot private app token)");
   }
 
   // Retry up to 3x on 429/5xx with exponential backoff (1s, 3s, 9s).
@@ -53,8 +52,7 @@ export async function hsFetch<T = any>(
     const res = await fetch(`${GATEWAY_URL}${path}`, {
       ...init,
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "X-Connection-Api-Key": HUBSPOT_API_KEY,
+        Authorization: `Bearer ${HUBSPOT_API_KEY}`,
         "Content-Type": "application/json",
         ...(init?.headers || {}),
       },

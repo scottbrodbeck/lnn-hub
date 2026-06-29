@@ -43,16 +43,14 @@ async function requireAdmin(req: Request) {
 // Wrapper that captures status + body for diagnostics rather than throwing.
 async function rawHs(path: string, init?: RequestInit): Promise<{ ok: boolean; status: number; body: any; ms: number }> {
   const t0 = Date.now();
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   const HUBSPOT_API_KEY = Deno.env.get("HUBSPOT_API_KEY");
-  if (!LOVABLE_API_KEY || !HUBSPOT_API_KEY) {
-    return { ok: false, status: 0, body: { error: "Connector not configured" }, ms: Date.now() - t0 };
+  if (!HUBSPOT_API_KEY) {
+    return { ok: false, status: 0, body: { error: "HUBSPOT_API_KEY not configured" }, ms: Date.now() - t0 };
   }
-  const res = await fetch(`https://connector-gateway.lovable.dev/hubspot${path}`, {
+  const res = await fetch(`https://api.hubapi.com${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "X-Connection-Api-Key": HUBSPOT_API_KEY,
+      Authorization: `Bearer ${HUBSPOT_API_KEY}`,
       "Content-Type": "application/json",
       ...(init?.headers || {}),
     },
