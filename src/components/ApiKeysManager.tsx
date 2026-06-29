@@ -190,7 +190,7 @@ export function ApiKeysManager() {
           <div>
             <Label>Endpoint</Label>
             <code className="block bg-muted p-2 rounded mt-1 text-xs break-all">
-              POST https://nsqosbysixcjcwkdpajk.supabase.co/functions/v1/client-lookup
+              POST {`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/client-lookup`}
             </code>
           </div>
           <div>

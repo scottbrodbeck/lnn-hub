@@ -1,73 +1,35 @@
-# Welcome to your Lovable project
+# LNN Hub
 
-## Project info
+The unified LNN Hub web app — where advertisers and the community manage advertising, sponsored content, and event/announcement submissions across LNN's publications in one place.
 
-**URL**: https://lovable.dev/projects/2af0009b-cf5b-4bfc-9d44-5bb9c96f6d6b
+This repo began as a copy of the live **LNN Client Portal** and is being moved off Lovable onto our own infrastructure (Cloudflare + a Supabase project we own). The Content Hub will be folded in as a later milestone.
 
-## How can I edit this code?
+## Tech stack
 
-There are several ways of editing your application.
+- Vite + React 18 + TypeScript
+- shadcn/ui + Tailwind CSS
+- Supabase (Postgres, Auth, Storage, Edge Functions)
 
-**Use Lovable**
+## Local development
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/2af0009b-cf5b-4bfc-9d44-5bb9c96f6d6b) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+Requires Node.js (or Bun) and a Supabase project.
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+npm install            # or: bun install
+cp .env.example .env   # then fill in your Supabase project values
+npm run dev            # or: bun run dev
 ```
 
-**Edit a file directly in GitHub**
+The dev server runs at http://localhost:8080.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Environment
 
-**Use GitHub Codespaces**
+See `.env.example`. The app reads `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_SUPABASE_PROJECT_ID`. Set `VITE_APP_BASE_URL` to the canonical domain (e.g. `https://client.lnn.co`) so external-facing links stay stable across deployments.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Supabase
 
-## What technologies are used for this project?
+Database schema lives in `supabase/migrations/`; edge functions in `supabase/functions/`. Apply schema with the Supabase CLI (`supabase db push`) and deploy functions with `supabase functions deploy`.
 
-This project is built with:
+## Migration status (off Lovable)
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/2af0009b-cf5b-4bfc-9d44-5bb9c96f6d6b) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Moving off Lovable. Note: several edge functions still call Lovable gateway services at runtime — `ai.gateway.lovable.dev` (AI generation) and `connector-gateway.lovable.dev` (HubSpot, Slack) via a `LOVABLE_API_KEY`. These must be repointed to direct providers before/at cutover. See the migration plan for the full checklist.

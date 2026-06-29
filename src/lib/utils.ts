@@ -6,29 +6,19 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Returns the clean published app URL for use in external-facing links (e.g. Slack notifications).
- * Avoids long Lovable preview URLs that contain auth tokens.
+ * Returns the canonical app URL for external-facing links (e.g. Slack notifications).
+ * Prefers VITE_APP_BASE_URL when set (keeps links stable across staging/prod);
+ * otherwise falls back to the current origin.
  */
 export function getAppBaseUrl(): string {
-  const publishedUrl = 'https://client.lnn.co';
-  if (
-    window.location.origin.includes('lovableproject.com') ||
-    window.location.origin.includes('-preview--')
-  ) {
-    return publishedUrl;
-  }
-  return window.location.origin;
+  const canonical = (import.meta.env.VITE_APP_BASE_URL as string | undefined)?.trim();
+  return canonical || window.location.origin;
 }
 
 /**
- * Returns the current page URL using the clean base URL,
- * stripping out long preview tokens while preserving path and query.
+ * Returns the current page URL using the canonical base URL,
+ * preserving path and query.
  */
 export function getCleanCurrentUrl(): string {
-  const base = getAppBaseUrl();
-  const params = new URLSearchParams(window.location.search);
-  const keysToRemove = Array.from(params.keys()).filter(k => k.startsWith('__lovable_'));
-  keysToRemove.forEach(k => params.delete(k));
-  const search = params.toString();
-  return base + window.location.pathname + (search ? `?${search}` : '');
+  return getAppBaseUrl() + window.location.pathname + window.location.search;
 }
