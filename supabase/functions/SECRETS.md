@@ -65,10 +65,10 @@ automatically by the platform — you don't set those by hand.
 |---|---|---|
 | `MCP_AUTH_TOKEN` | ✅ | Bearer token for the `mcp-server` edge function (Claude Connectors). |
 
-## Lovable (being retired)
-| Secret | Required | Notes |
-|---|---|---|
-| `LOVABLE_API_KEY` | ⚠️ legacy | Only still referenced by `seed-test-drafts` (AI image generation — **deferred**, see its header comment). Drop this once that function is repointed to a real image provider. Every production path is off Lovable. |
+## Lovable — fully removed
+No edge function references `LOVABLE_API_KEY` anymore. The `seed-test-drafts` image-generation
+function (the last Lovable runtime dependency) has been removed entirely, so there is no
+`LOVABLE_API_KEY` to set — delete it from the project's secrets.
 
 ## Not secrets — stored in the database
 - **Beehiiv** (`beehiiv_config`) and **Mailchimp** (`mailchimp_config`) credentials are stored

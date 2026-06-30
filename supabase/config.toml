@@ -24,9 +24,6 @@ verify_jwt = false
 [functions.check-due-reminders]
 verify_jwt = false
 
-[functions.seed-test-drafts]
-verify_jwt = false
-
 [functions.optimize-animated-image]
 verify_jwt = false
 

@@ -54,7 +54,6 @@ interface SiteDialogProps {
 export function SiteDialog({ open, onOpenChange, onSuccess, editingSite }: SiteDialogProps) {
   const [loading, setLoading] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
-  const [generatingDrafts, setGeneratingDrafts] = useState(false);
   const [showBeehiivApiKey, setShowBeehiivApiKey] = useState(false);
   const [hasExistingBeehiivKey, setHasExistingBeehiivKey] = useState(false);
   const [beehiivSectionOpen, setBeehiivSectionOpen] = useState(false);
@@ -300,40 +299,6 @@ export function SiteDialog({ open, onOpenChange, onSuccess, editingSite }: SiteD
     }
   };
 
-  const handleGenerateDrafts = async () => {
-    if (!editingSite) {
-      toast.error('Please save the site first before generating drafts');
-      return;
-    }
-
-    setGeneratingDrafts(true);
-    try {
-      toast.info('Generating test drafts... This may take a minute.');
-
-      const { data, error } = await supabase.functions.invoke('seed-test-drafts', {
-        body: {
-          site_id: editingSite.id,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data.success) {
-        toast.success(data.message || 'Test drafts generated successfully!', {
-          description: 'Check the Drafts page to see the generated posts.',
-          duration: 5000,
-        });
-      } else {
-        toast.error(`Failed to generate drafts: ${data.error}`);
-      }
-    } catch (error: any) {
-      console.error('Error generating drafts:', error);
-      toast.error('Failed to generate drafts: ' + (error.message || 'Unknown error'));
-    } finally {
-      setGeneratingDrafts(false);
-    }
-  };
-
   const onSubmit = async (values: FormValues) => {
     setLoading(true);
     try {
@@ -549,17 +514,6 @@ export function SiteDialog({ open, onOpenChange, onSuccess, editingSite }: SiteD
                     <PlugZap className="mr-2 h-4 w-4" />
                     {testingConnection ? 'Testing...' : 'Test Connection'}
                   </Button>
-                  {editingSite && (
-                    <Button 
-                      type="button"
-                      variant="outline" 
-                      size="sm"
-                      onClick={handleGenerateDrafts}
-                      disabled={generatingDrafts}
-                    >
-                      {generatingDrafts ? 'Generating...' : 'Generate Drafts'}
-                    </Button>
-                  )}
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
