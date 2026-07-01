@@ -14,7 +14,8 @@
 // RUN:
 //   export SUPABASE_URL='https://nsqosbysixcjcwkdpajk.supabase.co'
 //   export EXPORT_DATABASE_KEY='<EXPORT_DATABASE_KEY secret from Lovable → Cloud → Secrets>'
-//   # optional: OUT_DIR (default ./export), TABLE_PAGE (default 2000), SKIP_STORAGE=1
+//   # optional: OUT_DIR (default ./export), TABLE_PAGE (default 2000),
+//   #           SKIP_STORAGE=1 (data only), STORAGE_ONLY=1 (manifest + storage only)
 //   deno run --allow-net --allow-env --allow-write --allow-read export-via-function.ts
 
 const SUPABASE_URL = need("SUPABASE_URL").replace(/\/+$/, "");
@@ -22,6 +23,7 @@ const EXPORT_KEY = need("EXPORT_DATABASE_KEY");
 const OUT = Deno.env.get("OUT_DIR") ?? "./export";
 const TABLE_PAGE = Number(Deno.env.get("TABLE_PAGE") ?? 2000);
 const SKIP_STORAGE = Deno.env.get("SKIP_STORAGE") === "1";
+const STORAGE_ONLY = Deno.env.get("STORAGE_ONLY") === "1";
 const FN = `${SUPABASE_URL}/functions/v1/export-database`;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -60,36 +62,38 @@ console.log("→ manifest");
 const manifest = await fn({ mode: "manifest" });
 await write(`${OUT}/manifest.json`, manifest);
 
-console.log("→ schema");
-await write(`${OUT}/schema.json`, await fn({ mode: "schema" }));
+if (!STORAGE_ONLY) {
+  console.log("→ schema");
+  await write(`${OUT}/schema.json`, await fn({ mode: "schema" }));
 
-for (const t of manifest.tables as Array<{ table: string; skipped?: boolean }>) {
-  if (t.skipped) { console.log(`  skip ${t.table} (denylisted)`); continue; }
-  const rows: unknown[] = [];
-  let offset = 0;
-  for (;;) {
-    const page = await fn({ mode: "table", table: t.table, offset, limit: TABLE_PAGE });
-    const got: unknown[] = page.rows ?? [];
-    rows.push(...got);
-    if (got.length < TABLE_PAGE) break;
-    offset += TABLE_PAGE;
+  for (const t of manifest.tables as Array<{ table: string; skipped?: boolean }>) {
+    if (t.skipped) { console.log(`  skip ${t.table} (denylisted)`); continue; }
+    const rows: unknown[] = [];
+    let offset = 0;
+    for (;;) {
+      const page = await fn({ mode: "table", table: t.table, offset, limit: TABLE_PAGE });
+      const got: unknown[] = page.rows ?? [];
+      rows.push(...got);
+      if (got.length < TABLE_PAGE) break;
+      offset += TABLE_PAGE;
+    }
+    await write(`${OUT}/tables/${t.table}.json`, rows);
+    console.log(`  table ${t.table}: ${rows.length} rows`);
   }
-  await write(`${OUT}/tables/${t.table}.json`, rows);
-  console.log(`  table ${t.table}: ${rows.length} rows`);
-}
 
-console.log("→ auth_users");
-const users: unknown[] = [];
-let uoff = 0; const ulim = 1000;
-for (;;) {
-  const page = await fn({ mode: "auth_users", offset: uoff, limit: ulim });
-  const got: unknown[] = page.rows ?? [];
-  users.push(...got);
-  uoff += ulim;
-  if (got.length < ulim || uoff >= Number(page.total ?? 0)) break;
+  console.log("→ auth_users");
+  const users: unknown[] = [];
+  let uoff = 0; const ulim = 1000;
+  for (;;) {
+    const page = await fn({ mode: "auth_users", offset: uoff, limit: ulim });
+    const got: unknown[] = page.rows ?? [];
+    users.push(...got);
+    uoff += ulim;
+    if (got.length < ulim || uoff >= Number(page.total ?? 0)) break;
+  }
+  await write(`${OUT}/auth_users.json`, users);
+  console.log(`  auth_users: ${users.length} (no password hashes)`);
 }
-await write(`${OUT}/auth_users.json`, users);
-console.log(`  auth_users: ${users.length} (no password hashes)`);
 
 if (!SKIP_STORAGE) {
   for (const b of manifest.storage as Array<{ bucket: string; objects: Array<{ path: string }> }>) {

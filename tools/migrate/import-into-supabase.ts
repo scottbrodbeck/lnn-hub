@@ -29,6 +29,7 @@ const TARGET_URL = need("TARGET_URL").replace(/\/+$/, "");
 const TARGET_SERVICE_KEY = need("TARGET_SERVICE_KEY");
 const EXPORT_DIR = Deno.env.get("EXPORT_DIR") ?? "./export";
 const BATCH = 1000;
+const SKIP_TABLES = new Set((Deno.env.get("SKIP_TABLES") ?? "").split(",").map((s) => s.trim()).filter(Boolean));
 
 // GoTrue defines several token columns as NOT NULL DEFAULT ''. The export omits them (redacted),
 // so we set them to '' to avoid NOT NULL violations on insert. If auth load fails on another
@@ -77,6 +78,7 @@ await sql.begin(async (tx) => {
 
   for (const t of manifest.tables as Array<{ table: string; skipped?: boolean }>) {
     if (t.skipped) continue;
+    if (SKIP_TABLES.has(t.table)) { console.log(`skipped ${t.table} (SKIP_TABLES)`); continue; }
     let rows: Record<string, unknown>[];
     try { rows = await readJson(`${EXPORT_DIR}/tables/${t.table}.json`); } catch { continue; }
     if (!rows.length) continue;
