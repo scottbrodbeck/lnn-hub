@@ -2,27 +2,23 @@
 // edge function into local JSON files (+ storage bytes). This is the FALLBACK path, used while the
 // hash-preserving pg_dump route is blocked.
 //
-// IMPORTANT LIMITATIONS (by design — the function redacts secrets):
-//   • auth users come WITHOUT password hashes -> users must RESET their password on first login to
-//     the new system. Fine for a staging/test copy; revisit for the real cutover.
-//   • auth.identities (OAuth links), auth.sessions/refresh_tokens are NOT exported.
-//   • Denylisted tables are skipped entirely: otp_codes, qbo_auth_state, crm_user_push_quota.
-//   • Output is JSON — loading it into the new project is a separate importer step.
+// AUTH: the function accepts a shared key via the `x-export-key` header (the EXPORT_DATABASE_KEY
+// secret configured in Lovable) — no user login / JWT required.
 //
-// PREREQS: the `export-database` function must be deployed in Lovable (Cloud → Edge functions),
-// and you need a super_admin account.
+// IMPORTANT LIMITATIONS (by design — the function redacts secrets):
+//   • auth users come WITHOUT password hashes -> users reset / use magic-link on first login.
+//   • auth.identities and sessions/refresh_tokens are NOT exported.
+//   • Denylisted tables are skipped: otp_codes, qbo_auth_state, crm_user_push_quota.
+//   • Output is JSON — loading it into the target is a separate step (import-into-supabase.ts).
 //
 // RUN:
 //   export SUPABASE_URL='https://nsqosbysixcjcwkdpajk.supabase.co'
-//   export ANON_KEY='<VITE_SUPABASE_PUBLISHABLE_KEY from lnncontent/.env>'
-//   export SUPER_ADMIN_EMAIL='you@lnn.co'   export SUPER_ADMIN_PASSWORD='...'
+//   export EXPORT_DATABASE_KEY='<EXPORT_DATABASE_KEY secret from Lovable → Cloud → Secrets>'
 //   # optional: OUT_DIR (default ./export), TABLE_PAGE (default 2000), SKIP_STORAGE=1
 //   deno run --allow-net --allow-env --allow-write --allow-read export-via-function.ts
 
 const SUPABASE_URL = need("SUPABASE_URL").replace(/\/+$/, "");
-const ANON = need("ANON_KEY");
-const EMAIL = need("SUPER_ADMIN_EMAIL");
-const PASSWORD = need("SUPER_ADMIN_PASSWORD");
+const EXPORT_KEY = need("EXPORT_DATABASE_KEY");
 const OUT = Deno.env.get("OUT_DIR") ?? "./export";
 const TABLE_PAGE = Number(Deno.env.get("TABLE_PAGE") ?? 2000);
 const SKIP_STORAGE = Deno.env.get("SKIP_STORAGE") === "1";
@@ -35,27 +31,20 @@ function need(n: string): string {
   return v;
 }
 
-let token = await signIn();
-async function signIn(): Promise<string> {
-  const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: { apikey: ANON, "content-type": "application/json" },
-    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
-  });
-  if (!r.ok) { console.error(`sign-in failed: ${r.status} ${await r.text()}`); Deno.exit(1); }
-  return (await r.json()).access_token as string;
-}
-
 // deno-lint-ignore no-explicit-any
 async function fn(body: Record<string, unknown>): Promise<any> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const r = await fetch(FN, {
       method: "POST",
-      headers: { authorization: `Bearer ${token}`, apikey: ANON, "content-type": "application/json" },
+      headers: { "x-export-key": EXPORT_KEY, "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (r.status === 401) { token = await signIn(); continue; }  // expired token -> refresh
-    if (r.status === 429) { await sleep(5000); continue; }        // rate limited -> wait
+    if (r.status === 429) { await sleep(5000); continue; } // rate limited -> wait
+    if (r.status === 401 || r.status === 403) {
+      console.error(`Auth failed (${r.status}) — check EXPORT_DATABASE_KEY matches the secret set in Lovable.`);
+      console.error(await r.text());
+      Deno.exit(1);
+    }
     if (!r.ok) throw new Error(`${JSON.stringify(body)} -> ${r.status} ${await r.text()}`);
     return await r.json();
   }
