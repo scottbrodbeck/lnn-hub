@@ -1,24 +1,26 @@
-// import-into-supabase.ts — load an export/ folder (produced by export-via-function.ts) into a NEW
+// import-into-supabase.ts — load an export/ folder (from export-via-function.ts) into a NEW
 // Supabase project we own. Pairs with the "good enough" fallback export.
 //
 // Loads table rows + auth.users (PRESERVING ids so public → auth foreign keys stay intact) via a
 // direct Postgres connection with FK checks / triggers / RLS disabled, then re-syncs sequences and
 // uploads storage files via the Storage API. Uses json_populate_recordset so each field is cast to
-// the real column type (handles jsonb, arrays, timestamps) instead of hand-building column lists.
+// the real column type (handles jsonb, arrays, timestamps).
 //
-// ⚠️ DRAFT — test against a throwaway target first. Known risk points are flagged inline.
+// ⚠️ DRAFT — test against a throwaway target first.
 //
-// PREREQUISITE — the target SCHEMA must already exist. Create it first from the repo root:
-//     supabase link --project-ref <target-ref>
-//     supabase db push            # applies supabase/migrations/ to the new project
+// PREREQUISITE — the target SCHEMA must already exist:
+//     supabase db push --db-url "$TARGET_DB_URL"     # applies supabase/migrations/ to the new project
 //
-// LIMITATIONS inherited from the export: no password hashes (users reset / use magic-link on first
+// LIMITATIONS inherited from the export: no password hashes (users reset / magic-link on first
 // login), auth.identities/OAuth not restored, denylisted tables skipped.
 //
 // RUN:
 //   export TARGET_DB_URL='postgresql://postgres.<ref>:<pw>@<pooler-host>:5432/postgres?sslmode=require'
 //   export TARGET_URL='https://<ref>.supabase.co'   TARGET_SERVICE_KEY='<target service_role key>'
-//   export EXPORT_DIR='./export'   # optional, default ./export
+//   export EXPORT_DIR='./export'          # optional, default ./export
+//   export SKIP_TABLES='crm_sync_log'     # optional, comma-separated tables to skip
+//   export SKIP_STORAGE=1                 # optional, skip the storage upload
+//   export STORAGE_ONLY=1                 # optional, upload storage only (skip data load)
 //   deno run --allow-net --allow-env --allow-read import-into-supabase.ts
 
 import postgres from "https://deno.land/x/postgresjs@v3.4.5/mod.js";
@@ -30,10 +32,12 @@ const TARGET_SERVICE_KEY = need("TARGET_SERVICE_KEY");
 const EXPORT_DIR = Deno.env.get("EXPORT_DIR") ?? "./export";
 const BATCH = 1000;
 const SKIP_TABLES = new Set((Deno.env.get("SKIP_TABLES") ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+const SKIP_STORAGE = Deno.env.get("SKIP_STORAGE") === "1";
+const STORAGE_ONLY = Deno.env.get("STORAGE_ONLY") === "1";
 
 // GoTrue defines several token columns as NOT NULL DEFAULT ''. The export omits them (redacted),
-// so we set them to '' to avoid NOT NULL violations on insert. If auth load fails on another
-// NOT NULL column, add it here.
+// so we set them to '' to avoid NOT NULL violations. If auth load fails on another NOT NULL
+// column, add it here.
 const AUTH_EMPTY_STRING_COLS = [
   "confirmation_token", "recovery_token", "email_change", "email_change_token_new",
   "email_change_token_current", "phone_change", "phone_change_token", "reauthentication_token",
@@ -52,16 +56,6 @@ const supa = createClient(TARGET_URL, TARGET_SERVICE_KEY, { auth: { persistSessi
 
 const manifest = await readJson(`${EXPORT_DIR}/manifest.json`);
 
-// Guard: refuse if the target schema hasn't been created yet.
-const [{ count }] = await sql`
-  select count(*)::int as count from information_schema.tables
-  where table_schema='public' and table_type='BASE TABLE'`;
-if (count === 0) {
-  console.error("Target has no public tables. Create the schema first: supabase link && supabase db push");
-  await sql.end();
-  Deno.exit(3);
-}
-
 // deno-lint-ignore no-explicit-any
 async function loadRows(tx: any, schemaTable: string, rows: Record<string, unknown>[]) {
   for (let i = 0; i < rows.length; i += BATCH) {
@@ -73,31 +67,41 @@ async function loadRows(tx: any, schemaTable: string, rows: Record<string, unkno
   }
 }
 
-await sql.begin(async (tx) => {
-  await tx.unsafe("set session_replication_role = replica"); // disable FK/triggers/RLS during load
-
-  for (const t of manifest.tables as Array<{ table: string; skipped?: boolean }>) {
-    if (t.skipped) continue;
-    if (SKIP_TABLES.has(t.table)) { console.log(`skipped ${t.table} (SKIP_TABLES)`); continue; }
-    let rows: Record<string, unknown>[];
-    try { rows = await readJson(`${EXPORT_DIR}/tables/${t.table}.json`); } catch { continue; }
-    if (!rows.length) continue;
-    await loadRows(tx, `public.${JSON.stringify(t.table).slice(1, -1)}`, rows);
-    console.log(`loaded public.${t.table}: ${rows.length}`);
+if (!STORAGE_ONLY) {
+  const [{ count }] = await sql`
+    select count(*)::int as count from information_schema.tables
+    where table_schema='public' and table_type='BASE TABLE'`;
+  if (count === 0) {
+    console.error('Target has no public tables. Create the schema first: supabase db push --db-url "$TARGET_DB_URL"');
+    await sql.end();
+    Deno.exit(3);
   }
 
-  // auth.users — preserve ids so the public FKs above resolve. Passwords are absent → reset on login.
-  let users: Record<string, unknown>[] = [];
-  try { users = await readJson(`${EXPORT_DIR}/auth_users.json`); } catch { /* none */ }
-  for (const u of users) for (const c of AUTH_EMPTY_STRING_COLS) if (u[c] == null) u[c] = "";
-  if (users.length) {
-    await loadRows(tx, "auth.users", users);
-    console.log(`loaded auth.users: ${users.length} (no passwords — reset / magic-link on first login)`);
-  }
-});
+  await sql.begin(async (tx) => {
+    await tx.unsafe("set session_replication_role = replica"); // disable FK/triggers/RLS during load
 
-// Re-sync public sequences to MAX(owning column).
-await sql.unsafe(`
+    for (const t of manifest.tables as Array<{ table: string; skipped?: boolean }>) {
+      if (t.skipped) continue;
+      if (SKIP_TABLES.has(t.table)) { console.log(`skipped ${t.table} (SKIP_TABLES)`); continue; }
+      let rows: Record<string, unknown>[];
+      try { rows = await readJson(`${EXPORT_DIR}/tables/${t.table}.json`); } catch { continue; }
+      if (!rows.length) continue;
+      await loadRows(tx, `public.${JSON.stringify(t.table).slice(1, -1)}`, rows);
+      console.log(`loaded public.${t.table}: ${rows.length}`);
+    }
+
+    // auth.users — preserve ids so the public FKs above resolve. Passwords absent → reset on login.
+    let users: Record<string, unknown>[] = [];
+    try { users = await readJson(`${EXPORT_DIR}/auth_users.json`); } catch { /* none */ }
+    for (const u of users) for (const c of AUTH_EMPTY_STRING_COLS) if (u[c] == null) u[c] = "";
+    if (users.length) {
+      await loadRows(tx, "auth.users", users);
+      console.log(`loaded auth.users: ${users.length} (no passwords — reset / magic-link on first login)`);
+    }
+  });
+
+  // Re-sync public sequences to MAX(owning column).
+  await sql.unsafe(`
 do $$
 declare r record; maxv bigint;
 begin
@@ -113,21 +117,22 @@ begin
     execute format('select setval(%L, greatest(%s,1), %L)', r.sch||'.'||r.seq, maxv, maxv>0);
   end loop;
 end $$;`);
-console.log("sequences re-synced");
+  console.log("sequences re-synced");
+}
 
-// Storage: recreate buckets + upload files. Bucket flags aren't in the export manifest, so we
-// special-case the known public bucket; everything else is created private (safer for tax-documents).
-for (const b of (manifest.storage ?? []) as Array<{ bucket: string; objects: Array<{ path: string }> }>) {
-  await supa.storage.createBucket(b.bucket, { public: b.bucket === "editor-images" }).catch(() => {});
-  let ok = 0, miss = 0;
-  for (const o of b.objects) {
-    let bytes: Uint8Array;
-    try { bytes = await Deno.readFile(`${EXPORT_DIR}/storage/${b.bucket}/${o.path}`); } catch { miss++; continue; }
-    const { error } = await supa.storage.from(b.bucket).upload(o.path, bytes, { upsert: true });
-    if (error) console.log(`  upload fail ${b.bucket}/${o.path}: ${error.message}`); else ok++;
+if (!SKIP_STORAGE) {
+  for (const b of (manifest.storage ?? []) as Array<{ bucket: string; objects: Array<{ path: string }> }>) {
+    await supa.storage.createBucket(b.bucket, { public: b.bucket === "editor-images" }).catch(() => {});
+    let ok = 0, miss = 0;
+    for (const o of b.objects) {
+      let bytes: Uint8Array;
+      try { bytes = await Deno.readFile(`${EXPORT_DIR}/storage/${b.bucket}/${o.path}`); } catch { miss++; continue; }
+      const { error } = await supa.storage.from(b.bucket).upload(o.path, bytes, { upsert: true });
+      if (error) console.log(`  upload fail ${b.bucket}/${o.path}: ${error.message}`); else ok++;
+    }
+    console.log(`storage ${b.bucket}: uploaded ${ok}, missing-local ${miss}`);
   }
-  console.log(`storage ${b.bucket}: uploaded ${ok}, missing-local ${miss}`);
 }
 
 await sql.end();
-console.log("\n✓ Import complete. Verify row counts, then do the login smoke test (magic-link OTP or password reset).");
+console.log("\n✓ Import step complete.");
