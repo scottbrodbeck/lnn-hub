@@ -100,7 +100,7 @@ export function ClientLayout() {
     <>
       <div className="p-6 border-b border-border">
         <img src={lnnLogo} alt="LNN Logo" className="h-12 w-auto mb-4" />
-        <h1 className="text-xl font-bold text-foreground">Client Portal</h1>
+        <h1 className="text-xl font-bold text-foreground">Local Hub</h1>
         <p className="text-sm text-muted-foreground mt-1">{user?.email}</p>
         {activeOrganizationName && (
           <p className="text-xs text-primary mt-1 font-medium">{activeOrganizationName}</p>

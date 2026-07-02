@@ -64,7 +64,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
     },
     body: JSON.stringify({
       personalizations: [{ to: [{ email: to }] }],
-      from: { email: "content@lnn.co", name: "LNN Client Portal" },
+      from: { email: "content@lnn.co", name: "LNN Local Hub" },
       subject: subject,
       content: [{ type: "text/html", value: html }],
     }),

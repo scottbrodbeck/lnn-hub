@@ -2,7 +2,7 @@
 // editor when no content has been saved, and used as the client-side fallback.
 // Admins can fully replace this from Settings → Onboarding.
 export const DEFAULT_GUIDE_CONTENT = `
-<h2>Welcome to the LNN Client Portal</h2>
+<h2>Welcome to the LNN Local Hub</h2>
 <p>This portal is where you submit sponsored content, manage email campaigns and display ads, and track everything you have running with us.</p>
 
 <h2>Sponsored posts</h2>

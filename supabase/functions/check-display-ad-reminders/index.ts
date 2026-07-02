@@ -178,7 +178,7 @@ const handler = async (req: Request): Promise<Response> => {
           },
           body: JSON.stringify({
             personalizations: [{ to: [{ email: reminderEmail }] }],
-            from: { email: "content@lnn.co", name: "LNN Client Portal" },
+            from: { email: "content@lnn.co", name: "LNN Local Hub" },
             subject,
             content: [{ type: "text/html", value: html }],
           }),

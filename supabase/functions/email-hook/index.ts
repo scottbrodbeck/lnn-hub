@@ -130,7 +130,7 @@ serve(async (req) => {
 
     // Determine email content based on action type
     let subject = "Your Login Code";
-    let heading = "Login to LNN Client Portal";
+    let heading = "Login to LNN Local Hub";
     let actionText = "log in";
 
     if (email_action_type === "recovery") {
@@ -139,7 +139,7 @@ serve(async (req) => {
       actionText = "reset your password";
     } else if (email_action_type === "signup" || email_action_type === "email_confirmation") {
       subject = "Confirm Your Email";
-      heading = "Welcome to LNN Client Portal";
+      heading = "Welcome to LNN Local Hub";
       actionText = "confirm your email";
     }
 
@@ -181,7 +181,7 @@ serve(async (req) => {
           <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
           
           <p style="font-size: 12px; color: #999; text-align: center;">
-            LNN Client Portal
+            LNN Local Hub
           </p>
         </body>
       </html>
@@ -196,7 +196,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         personalizations: [{ to: [{ email: user.email }] }],
-        from: { email: "content@lnn.co", name: "LNN Client Portal" },
+        from: { email: "content@lnn.co", name: "LNN Local Hub" },
         subject: subject,
         content: [{ type: "text/html", value: html }],
       }),

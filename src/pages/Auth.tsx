@@ -217,13 +217,13 @@ export default function Auth() {
           <div className="flex justify-center">
             <img 
               src={lnnLogo} 
-              alt="LNN Client Portal" 
+              alt="LNN Local Hub" 
               className="h-24 w-auto"
             />
           </div>
           <div>
             <CardTitle className="text-2xl">
-              {authMode === 'login' && 'Client Portal'}
+              {authMode === 'login' && 'Local Hub'}
               {authMode === 'forgot' && 'Reset Password'}
               {authMode === 'reset' && 'Set New Password'}
               {authMode === 'otp' && 'Email Login Code'}

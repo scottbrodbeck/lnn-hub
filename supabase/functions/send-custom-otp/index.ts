@@ -83,7 +83,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         personalizations: [{ to: [{ email }] }],
-        from: { email: "content@lnn.co", name: "LNN Client Portal" },
+        from: { email: "content@lnn.co", name: "LNN Local Hub" },
         subject: "Your Login Code",
         content: [
           {
@@ -97,7 +97,7 @@ serve(async (req) => {
               </head>
               <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-                  <h1 style="color: #ffffff; margin: 0; font-size: 24px;">LNN Client Portal</h1>
+                  <h1 style="color: #ffffff; margin: 0; font-size: 24px;">LNN Local Hub</h1>
                 </div>
                 
                 <div style="background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">

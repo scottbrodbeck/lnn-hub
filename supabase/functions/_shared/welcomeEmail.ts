@@ -68,7 +68,7 @@ function defaultWelcomeBody(guideEnabled: boolean): string {
     : '';
   return `Hi {{full_name}},
 
-Welcome to the LNN Client Portal! Your account ({{email}}) is ready.
+Welcome to the LNN Local Hub! Your account ({{email}}) is ready.
 
 Click below to sign in instantly — no password needed — and finish setting up your account:
 
@@ -83,7 +83,7 @@ Questions? Just use the Help button in the portal.
 — The LNN Team`;
 }
 
-const WELCOME_SUBJECT = 'Welcome to the LNN Client Portal';
+const WELCOME_SUBJECT = 'Welcome to the LNN Local Hub';
 
 async function logWelcomeEmail(
   supabaseAdmin: SupabaseClient,
@@ -179,7 +179,7 @@ export async function sendWelcomeEmail(
       <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-          <h1 style="color: #ffffff; margin: 0; font-size: 24px;">LNN Client Portal</h1>
+          <h1 style="color: #ffffff; margin: 0; font-size: 24px;">LNN Local Hub</h1>
         </div>
         <div style="background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">
           ${htmlInner}

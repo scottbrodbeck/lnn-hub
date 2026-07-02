@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
       blocks,
       unfurl_links: false,
       unfurl_media: false,
-      username: 'LNN Client Portal',
+      username: 'LNN Local Hub',
       icon_emoji: ':newspaper:',
     });
 

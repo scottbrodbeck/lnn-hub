@@ -59,7 +59,7 @@ export function WelcomeCard() {
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            <h2 className="font-semibold">Welcome to the LNN Client Portal</h2>
+            <h2 className="font-semibold">Welcome to the LNN Local Hub</h2>
           </div>
           <Button variant="ghost" size="icon" className="h-7 w-7 -mt-1 -mr-1" onClick={dismiss} aria-label="Dismiss">
             <X className="h-4 w-4" />
