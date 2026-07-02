@@ -1,89 +1,69 @@
-# LNN Hub — database migration tooling (Lovable Cloud → our own Supabase)
+# LNN Hub — database migration tooling
 
-A small, purpose-built exporter for the one-time clone of the live Client Portal database off
-Lovable Cloud into a Supabase project we own. Mechanics are adapted from the open-source
-[dreamlit-ai/lovable-cloud-to-supabase-exporter](https://github.com/dreamlit-ai/lovable-cloud-to-supabase-exporter)
-(MIT), scoped down for our case (single storage bucket, maintenance-window cutover, no resume needed).
+Moves the live Client Portal database off **Lovable Cloud** into a **Supabase project we own**.
+There is no direct DB connection string on Lovable Cloud, so we export via an edge function and
+re-import into the target. **This was validated end-to-end against a throwaway dry-run project
+(`lnn-hub-dryrun` / `ccoqwkqougipfxuveceb`) on 2026-07-01.**
 
-> ⚠️ **These scripts are DRAFTS and have not been run yet.** Test every step against a **throwaway
-> target Supabase project** first. The auth-data load (Phase 2 of `export-db.sh`) is the part most
-> likely to need adjustment — see "If the auth data load fails" below.
+## Working path (what actually ran)
 
-## Why this exists
+All secrets live in a gitignored `tools/migrate/.env.migrate`:
+`EXPORT_DATABASE_KEY` (shared key for the export function), `TARGET_DB_URL` (**Session pooler** URL —
+the direct `db.<ref>.supabase.co` host is IPv6-only and won't connect from most machines),
+`TARGET_URL`, `TARGET_SERVICE_KEY`.
 
-Lovable Cloud exposes no Postgres connection string in its UI. But every Lovable Cloud edge
-function has `SUPABASE_DB_URL` + `SUPABASE_SERVICE_ROLE_KEY` injected as env vars. So we deploy a
-tiny **credential-broker** function (`migrate-helper`) inside Lovable, have it hand those back behind
-a one-time secret, and then run standard Postgres tools locally against the source DB.
-
-## Files
-
-| File | Runs where | Purpose |
-|---|---|---|
-| `migrate-helper/index.ts` | inside **Lovable Cloud** (paste via Lovable chat) | returns the source DB URL + service-role key behind an `x-access-key` header |
-| `export-db.sh` | your machine | clones schema + data (incl. `auth` users with password hashes) into the new project |
-| `copy-storage.ts` | your machine (Deno) | copies Storage buckets + objects via the REST API |
-| `verify.sh` | your machine | row-count reconciliation, source vs target |
-
-## Prerequisites
-
-- A **new, empty Supabase project** you own (the target).
-- `pg_dump` + `psql` (Postgres client **15+**, matching the source's major version) on PATH.
-- `deno` for the storage copy.
-
-## Runbook
-
-1. **Deploy the helper.** Replace `ACCESS_KEY` in `migrate-helper/index.ts` (`openssl rand -hex 24`).
-   In Lovable's chat, ask it to create + deploy an edge function named `migrate-helper` with that
-   code. Copy the function URL.
-
-2. **Get the source credentials.**
+1. **Export** (Deno — HTTPS, works fine):
    ```sh
-   curl -s -X POST "<MIGRATE_HELPER_URL>" -H "x-access-key: <YOUR_ACCESS_KEY>" | jq
-   # -> { db_url, service_role_key, supabase_url }
+   SUPABASE_URL=… EXPORT_DATABASE_KEY=… OUT_DIR=… deno run -A export-via-function.ts
    ```
-   If `db_url` host resolves IPv6-only and your machine can't connect, swap in the project's
-   **Session pooler** connection string.
+   Pulls `manifest.json`, `schema.json`, `tables/*.json` (redacted), `auth_users.json`
+   (no password hashes), and, with a second `STORAGE_ONLY=1` pass, the `storage/` files.
 
-3. **Clone the database** (into the empty target):
-   ```sh
-   export SOURCE_DB_URL='<db_url from step 2>'
-   export TARGET_DB_URL='<new project → Connect → Session pooler>'
-   ./export-db.sh --confirm-target-blank
-   ```
+2. **Schema** (Node + `pg`): `node rebuild-schema.mjs`
+   Resets `public` objects, then applies every migration **statement-by-statement** with a
+   **per-file `search_path` reset** (the pg_dump baseline sets `search_path=''` for the session,
+   which breaks later migrations that use unqualified type names). Continues past benign errors.
 
-4. **Copy storage:**
-   ```sh
-   export SOURCE_URL='<supabase_url from step 2>'   SOURCE_SERVICE_KEY='<service_role_key>'
-   export TARGET_URL='https://<new-ref>.supabase.co' TARGET_SERVICE_KEY='<new service_role key>'
-   deno run --allow-net --allow-env copy-storage.ts
-   ```
+3. **Gap-fill** (Node): `FILES=a.sql,b.sql node apply-files.mjs`
+   Re-applies specific migrations (DDL only — skips INSERT/UPDATE/DELETE) to create tables whose
+   `CREATE` referenced objects defined in *later* migrations (forward-ordering failures on a clean build).
 
-5. **Verify:**
-   ```sh
-   ./verify.sh
-   ```
-   Then do the **manual login smoke test**: log into the app (pointed at the new project) as a real
-   user, by password AND by magic-link OTP. This is the go/no-go gate.
+4. **Data + storage** (Node + `pg`): `node import-data.mjs`
+   Loads tables + `auth.users` inside one transaction with `session_replication_role = replica`
+   (FK/triggers/RLS off) and a **savepoint per table** (one failure can't abort the rest). Uses
+   `json_populate_recordset` for type-safe loads; **excludes generated columns** (e.g. `confirmed_at`)
+   on `auth.users`; preserves user ids so public FKs resolve; re-syncs sequences; uploads `storage/`
+   over the Storage REST API. `SKIP_TABLES=crm_sync_log` (disposable 123 MB HubSpot ledger),
+   `SKIP_STORAGE=1` / `STORAGE_ONLY=1` to split the passes.
 
-6. **Tear down:** delete the `migrate-helper` function from Lovable and rotate its access key.
+`conn-test.mjs` is a quick connectivity check. `npm install` first (installs `pg`).
 
-## If the auth data load fails (most likely failure point)
+### TLS note
+Supabase's pooler presents a self-signed CA that Node/Deno don't trust by default. These scripts
+connect with `ssl: { rejectUnauthorized: false }` (encrypted, CA check skipped) — **explicitly
+authorized** for this one-time migration. For stricter verification, download Supabase's CA cert
+(Dashboard → Database → SSL) and pass it as `ssl: { ca }`. (Deno's TLS ignores both `rejectUnauthorized`
+and a custom CA store here, which is why the DB steps run on Node, not Deno.)
 
-`export-db.sh` copies the live `auth` table **data** but relies on the new project's managed `auth`
-schema having a compatible column set. New projects are usually a newer GoTrue version (a superset),
-so the source's column list loads fine. If Phase 2 errors on an `auth` column mismatch, switch to the
-Dreamlit approach: also dump the **source** `auth` schema definition (`pg_dump --schema-only
---schema=auth`), strip `CREATE SCHEMA`, and restore it before the data load so the column sets match
-exactly.
+## Dry-run result (2026-07-01 → `lnn-hub-dryrun`)
 
-## NOT handled here (do these separately — see the migration plan)
+55 tables + 102 RLS policies; ~42 tables loaded with row counts matching source exactly (230 users,
+230 profiles, 162 orgs, 349 posts, 10,001 CRM contacts, 6,359 deals, …); 1,456 storage files.
+Known minor gaps: `crm_activities` 76,725/77,401 (offset-pagination loss on tied timestamps);
+`admin_audit_logs` (legacy integer-vs-uuid type mismatch); `admin_daily_checklist` (check-constraint
+rejects some `item_type` values).
 
-- Redeploy the ~51 edge functions + set their secrets in the new project.
-- Reconfigure Auth: provider config, redirect/site URLs, email templates, SMTP/SendGrid, `email-hook`.
-- Recreate `pg_cron` jobs, `pg_net` webhooks, and any Realtime publications (managed schemas the
-  dump excludes).
-- Repoint the Lovable-gateway edge functions (AI via `ai.gateway.lovable.dev`; HubSpot + Slack via
-  `connector-gateway.lovable.dev`) to direct providers.
-- Re-register external callbacks at the new project's URLs: Intuit/QuickBooks OAuth, any Stripe
-  webhooks, Zapier routes, Claude Connectors (`mcp-server`).
+## TODO before the REAL cutover (not just a dry run)
+
+- **Preserve password hashes.** The export function redacts them, so all users would reset. For the
+  real cutover, export `auth.users` *with* `encrypted_password` (pg_dump path, or extend the function).
+- **Keyset-paginate big tables** in the export (order by a unique key, not `created_at`) — offset
+  paging dropped ~0.9% of `crm_activities`.
+- **Reconcile `admin_audit_logs`** type mismatch and the `admin_daily_checklist` check constraint.
+- Redeploy edge functions + secrets, reconfigure auth (redirect URLs, email hook, SMTP), recreate
+  cron/`pg_net`/realtime, repoint the Lovable-gateway functions (AI/HubSpot/Slack) — see the main plan.
+
+## Alternative path (not used): pg_dump via a helper
+
+`migrate-helper/` + `export-db.sh` + `verify.sh` implement the hash-preserving `pg_dump` route, which
+needs a Postgres connection string. Kept for reference / the real cutover if we get direct DB access.

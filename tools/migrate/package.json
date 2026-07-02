@@ -1,0 +1,9 @@
+{
+  "name": "lnn-hub-migrate",
+  "private": true,
+  "type": "module",
+  "description": "One-time migration tooling: Lovable Cloud (Client Portal) -> an owned Supabase project. Node scripts (pg) are the working path; run with `node <script>.mjs`.",
+  "dependencies": {
+    "pg": "^8.13.0"
+  }
+}
