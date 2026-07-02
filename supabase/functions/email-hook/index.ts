@@ -125,8 +125,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Build the magic link URL
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || site_url;
+    // Build the magic link URL (SUPABASE_URL is always injected in edge functions)
     const magicLink = `${supabaseUrl}/auth/v1/verify?token=${token_hash}&type=${email_action_type}&redirect_to=${redirect_to}`;
 
     // Determine email content based on action type
