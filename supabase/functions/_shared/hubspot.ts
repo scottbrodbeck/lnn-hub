@@ -290,12 +290,15 @@ export async function runPull(
   const since = await getWatermark(admin, objectType);
   try {
     const { processed, lastModified } = await fn(since);
-    // Bump watermark by +1ms so we don't re-fetch the latest record on every tick.
-    // If lastModified is null but we processed records (HubSpot returned rows
-    // with no hs_lastmodifieddate), advance to "now" to avoid an infinite loop
-    // re-pulling the same first page.
+    // Advance the watermark to EXACTLY lastModified (no +1ms). The next tick's GTE
+    // filter re-includes records sharing this exact millisecond; upserts dedupe the
+    // harmless re-fetch. The previous +1ms silently skipped records that shared the
+    // boundary millisecond whenever a run stopped early (maxPages, an edge-function
+    // timeout, or the 10k search cap) — permanent, invisible CRM data loss.
+    // If lastModified is null but rows were processed, advance to "now" to avoid an
+    // infinite loop re-pulling the same first page.
     const advanced = lastModified
-      ? new Date(new Date(lastModified).getTime() + 1).toISOString()
+      ? new Date(lastModified).toISOString()
       : (processed > 0 ? new Date().toISOString() : since);
     await setSyncState(admin, objectType, {
       last_modified_watermark: advanced,

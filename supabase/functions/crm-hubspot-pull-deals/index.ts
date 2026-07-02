@@ -68,12 +68,22 @@ Deno.serve(async (req) => {
       const contactMap = new Map((contacts ?? []).map((c: any) => [c.hubspot_id, c.id]));
 
       const rows: any[] = [];
+      let earliestSkipped: string | null = null;
       for (const r of results) {
         if (pending.has(String(r.id))) continue;
         const p = r.properties || {};
         const pipelineId = pipelineMap.get(p.pipeline) ?? defaultPipeline?.id;
         const stageId = stageMap.get(p.dealstage);
-        if (!pipelineId || !stageId) continue; // Skip if pipeline/stage not yet synced
+        if (!pipelineId || !stageId) {
+          // Pipeline/stage not synced yet. Record the timestamp so we can hold the
+          // watermark before this deal — otherwise it advances past and the deal is
+          // never re-pulled (until an unrelated future edit bumps its modified date).
+          const lm = p.hs_lastmodifieddate;
+          if (lm && (!earliestSkipped || new Date(lm).getTime() < new Date(earliestSkipped).getTime())) {
+            earliestSkipped = lm;
+          }
+          continue;
+        }
 
         const isWon = p.hs_is_closed_won === "true" || p.hs_is_closed_won === true;
         const isLost = p.hs_is_closed_lost === "true" || p.hs_is_closed_lost === true;
@@ -115,7 +125,18 @@ Deno.serve(async (req) => {
         if (error) throw error;
         processed += slice.length;
       }
-      return { processed, lastModified };
+      // If any deals were skipped for unsynced pipeline/stage, hold the watermark
+      // just before the earliest skipped deal so they retry once pipelines/stages
+      // sync (pipelines pull only ~every 30 min). Safe: re-pulled deals upsert-dedupe.
+      let effectiveLastModified = lastModified;
+      if (earliestSkipped) {
+        const clampMs = new Date(earliestSkipped).getTime() - 1;
+        if (!effectiveLastModified || clampMs < new Date(effectiveLastModified).getTime()) {
+          effectiveLastModified = new Date(clampMs).toISOString();
+        }
+        console.warn(`[pull-deals] held watermark before an unsynced-pipeline deal (${earliestSkipped})`);
+      }
+      return { processed, lastModified: effectiveLastModified };
     });
     return json({ ok: !result.error, ...result });
   } catch (e: any) {

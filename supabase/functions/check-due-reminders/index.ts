@@ -35,6 +35,25 @@ const handler = async (req: Request): Promise<Response> => {
     const notificationsSent: string[] = [];
     const BASE_URL = 'https://client.lnn.co';
 
+    // Deduplication guard: if this cron already ran today (a cron double-fire, a
+    // manual re-trigger, or a retry after a partial failure), don't re-send reminders
+    // that already went out. send-user-notification logs every successful send to
+    // email_notification_logs with notification_type='due_tomorrow_reminder' and the
+    // assignment id in notification_data — mirror the sibling crons and key off that.
+    const todayUtc = now.toISOString().split('T')[0];
+    const { data: sentTodayLogs } = await supabase
+      .from('email_notification_logs')
+      .select('user_id, notification_data')
+      .eq('notification_type', 'due_tomorrow_reminder')
+      .eq('status', 'sent')
+      .gte('sent_at', todayUtc + 'T00:00:00Z');
+    const alreadyNotified = new Set(
+      (sentTodayLogs || []).map(
+        (l: any) => `${l.user_id}::${l.notification_data?.assignment_id ?? ''}`,
+      ),
+    );
+    const notifyKey = (uid: string, aid: string) => `${uid}::${aid}`;
+
     // Find all one-time assignments due tomorrow that haven't been submitted
     // EXCLUDE email sponsorships (handled separately with Thursday deadline logic)
     const { data: oneTimeAssignments, error: oneTimeError } = await supabase
@@ -150,6 +169,11 @@ const handler = async (req: Request): Promise<Response> => {
     if (oneTimeAssignments && oneTimeAssignments.length > 0) {
       for (const assignment of oneTimeAssignments) {
         if (assignment.assigned_to) {
+          const dedupKey = notifyKey(assignment.assigned_to, assignment.id);
+          if (alreadyNotified.has(dedupKey)) {
+            console.log('Skipping already-sent reminder for assignment:', assignment.id);
+            continue;
+          }
           try {
             const sites = assignment.sites as any;
             const siteName = Array.isArray(sites) ? sites[0]?.name : sites?.name;
@@ -175,6 +199,7 @@ const handler = async (req: Request): Promise<Response> => {
               console.error('Failed to send notification:', notifyError);
             } else {
               notificationsSent.push(assignment.id);
+              alreadyNotified.add(dedupKey);
               console.log('Sent reminder for assignment:', assignment.assignment_name);
             }
           } catch (err) {
@@ -191,6 +216,11 @@ const handler = async (req: Request): Promise<Response> => {
         const assignment = Array.isArray(assignmentData) ? assignmentData[0] : assignmentData;
         
         if (assignment?.assigned_to) {
+          const dedupKey = notifyKey(assignment.assigned_to, instance.assignment_id);
+          if (alreadyNotified.has(dedupKey)) {
+            console.log('Skipping already-sent reminder for instance:', instance.id);
+            continue;
+          }
           try {
             const sites = assignment.sites as any;
             const siteName = Array.isArray(sites) ? sites[0]?.name : sites?.name;
@@ -216,6 +246,7 @@ const handler = async (req: Request): Promise<Response> => {
               console.error('Failed to send notification:', notifyError);
             } else {
               notificationsSent.push(instance.id);
+              alreadyNotified.add(dedupKey);
               console.log('Sent reminder for instance:', assignment.assignment_name);
             }
           } catch (err) {
@@ -231,10 +262,15 @@ const handler = async (req: Request): Promise<Response> => {
       
       for (const assignment of sponsorshipAssignments) {
         if (assignment.assigned_to) {
+          const dedupKey = notifyKey(assignment.assigned_to, assignment.id);
+          if (alreadyNotified.has(dedupKey)) {
+            console.log('Skipping already-sent sponsorship reminder for:', assignment.id);
+            continue;
+          }
           try {
             const sites = assignment.sites as any;
             const siteName = Array.isArray(sites) ? sites[0]?.name : sites?.name;
-            
+
             const { error: notifyError } = await supabase.functions.invoke('send-user-notification', {
               body: {
                 type: 'due_tomorrow_reminder',
@@ -255,6 +291,7 @@ const handler = async (req: Request): Promise<Response> => {
               console.error('Failed to send sponsorship notification:', notifyError);
             } else {
               notificationsSent.push(assignment.id);
+              alreadyNotified.add(dedupKey);
               console.log('Sent reminder for sponsorship:', assignment.assignment_name);
             }
           } catch (err) {

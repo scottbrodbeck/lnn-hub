@@ -40,6 +40,52 @@ function pickRelinkEntity(): string {
   return RELINK_ROTATION[minute % RELINK_ROTATION.length];
 }
 
+// Single-flight lock so overlapping cron ticks don't double-run the pull workers.
+// Stored as a row in crm_sync_state (object_type='tick_lock'); no schema change.
+// last_run_at holds the current holder's claim time; null means free. Claims are
+// atomic under Postgres READ COMMITTED (the conditional UPDATE re-checks the row
+// after taking its row lock), so exactly one concurrent tick can win.
+const TICK_LOCK_KEY = "tick_lock";
+const TICK_LEASE_MS = 8 * 60 * 1000; // safety net: reclaim if a holder crashed mid-tick
+
+async function acquireTickLock(admin: any): Promise<boolean> {
+  const nowIso = new Date().toISOString();
+  const staleBefore = new Date(Date.now() - TICK_LEASE_MS).toISOString();
+  const { data: row } = await admin
+    .from("crm_sync_state")
+    .select("last_run_at")
+    .eq("object_type", TICK_LOCK_KEY)
+    .maybeSingle();
+
+  if (!row) {
+    // First ever run — create the row already claimed. A concurrent insert loses the
+    // unique(object_type) race and just doesn't get the lock.
+    const { error } = await admin
+      .from("crm_sync_state")
+      .insert({ object_type: TICK_LOCK_KEY, last_run_at: nowIso, updated_at: nowIso });
+    return !error;
+  }
+
+  const isFree = row.last_run_at === null || row.last_run_at < staleBefore;
+  if (!isFree) return false;
+
+  // Claim only if the row still matches what we read (optimistic concurrency).
+  let q = admin
+    .from("crm_sync_state")
+    .update({ last_run_at: nowIso, updated_at: nowIso })
+    .eq("object_type", TICK_LOCK_KEY);
+  q = row.last_run_at === null ? q.is("last_run_at", null) : q.eq("last_run_at", row.last_run_at);
+  const { data: claimed, error } = await q.select("object_type");
+  return !error && !!claimed && claimed.length > 0;
+}
+
+async function releaseTickLock(admin: any): Promise<void> {
+  await admin
+    .from("crm_sync_state")
+    .update({ last_run_at: null, updated_at: new Date().toISOString() })
+    .eq("object_type", TICK_LOCK_KEY);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -48,6 +94,12 @@ Deno.serve(async (req) => {
 
   if (await isSyncPaused(admin)) {
     return json({ ok: true, paused: true });
+  }
+
+  // Skip this tick if a previous (slow) tick is still running — prevents overlapping
+  // pulls that waste HubSpot quota and thrash watermarks. Released below.
+  if (!(await acquireTickLock(admin))) {
+    return json({ ok: true, skipped: "locked" });
   }
 
   // Quiet hours: 00:00–06:00 America/New_York. Skip all inbound pulls;
@@ -74,6 +126,7 @@ Deno.serve(async (req) => {
       latency_ms: Date.now() - start,
       detail: summary,
     });
+    await releaseTickLock(admin);
     return json({ ok: true, quiet_hours: true, summary });
   }
 
@@ -133,5 +186,7 @@ Deno.serve(async (req) => {
       detail: summary,
     });
     return json({ ok: false, error: e?.message ?? String(e), summary }, 500);
+  } finally {
+    await releaseTickLock(admin);
   }
 });
