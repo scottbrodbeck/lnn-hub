@@ -59,12 +59,21 @@ export function OrganizationDetailPanel({ organization, open, onOpenChange, onSe
 
   useEffect(() => {
     if (organization?.id && open) {
-      fetchOrganizationData(organization.id);
+      // Guard against a stale in-flight fetch clobbering newer data when the admin
+      // switches orgs (or closes the panel) mid-load. The cleanup flips `cancelled`,
+      // so the superseded fetch drops all of its setState calls.
+      let cancelled = false;
+      fetchOrganizationData(organization.id, () => cancelled);
+      return () => { cancelled = true; };
     }
   }, [organization?.id, open]);
 
-  const fetchOrganizationData = async (orgId: string) => {
+  const fetchOrganizationData = async (orgId: string, isCancelled: () => boolean = () => false) => {
     setLoading(true);
+    // Only apply results if this fetch hasn't been superseded by a newer one.
+    const apply = <T,>(setter: (v: T) => void, value: T) => {
+      if (!isCancelled()) setter(value);
+    };
     try {
       // Fetch sales rep profile (if any)
       const repId = (organization as any)?.sales_rep_user_id ?? null;
@@ -74,9 +83,9 @@ export function OrganizationDetailPanel({ organization, open, onOpenChange, onSe
           .select('id, full_name, email')
           .eq('id', repId)
           .maybeSingle();
-        setSalesRep(rep ?? null);
+        apply(setSalesRep, rep ?? null);
       } else {
-        setSalesRep(null);
+        apply(setSalesRep, null);
       }
 
       // Fetch users in this organization
@@ -93,7 +102,7 @@ export function OrganizationDetailPanel({ organization, open, onOpenChange, onSe
         ...uo.profiles,
         is_primary: uo.is_primary
       })) || [];
-      setUsers(orgUsers);
+      apply(setUsers, orgUsers);
 
       // Get user IDs for post query
       const userIds = orgUsers.map(u => u.id);
@@ -106,9 +115,9 @@ export function OrganizationDetailPanel({ organization, open, onOpenChange, onSe
           .in('client_id', userIds)
           .order('created_at', { ascending: false })
           .limit(10);
-        setPosts(postsData || []);
+        apply(setPosts, postsData || []);
       } else {
-        setPosts([]);
+        apply(setPosts, []);
       }
 
       // Fetch email blasts
@@ -118,7 +127,7 @@ export function OrganizationDetailPanel({ organization, open, onOpenChange, onSe
         .eq('organization_id', orgId)
         .order('scheduled_date', { ascending: false })
         .limit(10);
-      setEmailBlasts(blastsData || []);
+      apply(setEmailBlasts, blastsData || []);
 
       // Fetch email sponsorships
       const { data: sponsorshipsData } = await supabase
@@ -127,7 +136,7 @@ export function OrganizationDetailPanel({ organization, open, onOpenChange, onSe
         .eq('organization_id', orgId)
         .order('week_start_date', { ascending: false })
         .limit(10);
-      setEmailSponsorships(sponsorshipsData || []);
+      apply(setEmailSponsorships, sponsorshipsData || []);
 
       // Fetch display ad campaigns
       const { data: campaignsData } = await supabase
@@ -136,7 +145,7 @@ export function OrganizationDetailPanel({ organization, open, onOpenChange, onSe
         .eq('organization_id', orgId)
         .order('start_date', { ascending: false })
         .limit(10);
-      setDisplayCampaigns(campaignsData || []);
+      apply(setDisplayCampaigns, campaignsData || []);
 
       // Fetch active post assignments (no limit)
       const { data: activeAssignmentsData } = await supabase
@@ -155,7 +164,7 @@ export function OrganizationDetailPanel({ organization, open, onOpenChange, onSe
         .neq('content_category', 'email_sponsorship')
         .neq('content_category', 'email_blast')
         .order('due_date', { ascending: true });
-      setAssignments(activeAssignmentsData || []);
+      apply(setAssignments, activeAssignmentsData || []);
 
       // Fetch recently completed post assignments
       const { data: completedAssignmentsData } = await supabase
@@ -175,7 +184,7 @@ export function OrganizationDetailPanel({ organization, open, onOpenChange, onSe
         .neq('content_category', 'email_blast')
         .order('due_date', { ascending: false })
         .limit(10);
-      setCompletedAssignments(completedAssignmentsData || []);
+      apply(setCompletedAssignments, completedAssignmentsData || []);
 
       // Fetch active email blast assignments (no limit)
       const { data: blastAssignmentsData } = await supabase
@@ -191,7 +200,7 @@ export function OrganizationDetailPanel({ organization, open, onOpenChange, onSe
         .eq('content_category', 'email_blast')
         .eq('is_completed', false)
         .order('due_date', { ascending: true });
-      setBlastAssignments(blastAssignmentsData || []);
+      apply(setBlastAssignments, blastAssignmentsData || []);
 
       // Fetch recently completed email blast assignments
       const { data: completedBlastAssignmentsData } = await supabase
@@ -208,7 +217,7 @@ export function OrganizationDetailPanel({ organization, open, onOpenChange, onSe
         .eq('is_completed', true)
         .order('due_date', { ascending: false })
         .limit(10);
-      setCompletedBlastAssignments(completedBlastAssignmentsData || []);
+      apply(setCompletedBlastAssignments, completedBlastAssignmentsData || []);
 
       // Fetch active email sponsorship assignments (no limit)
       const { data: sponsorshipAssignmentsData } = await supabase
@@ -224,7 +233,7 @@ export function OrganizationDetailPanel({ organization, open, onOpenChange, onSe
         .eq('content_category', 'email_sponsorship')
         .eq('is_completed', false)
         .order('due_date', { ascending: true });
-      setSponsorshipAssignments(sponsorshipAssignmentsData || []);
+      apply(setSponsorshipAssignments, sponsorshipAssignmentsData || []);
 
       // Fetch recently completed email sponsorship assignments
       const { data: completedSponsorshipAssignmentsData } = await supabase
@@ -241,12 +250,12 @@ export function OrganizationDetailPanel({ organization, open, onOpenChange, onSe
         .eq('is_completed', true)
         .order('due_date', { ascending: false })
         .limit(10);
-      setCompletedSponsorshipAssignments(completedSponsorshipAssignmentsData || []);
+      apply(setCompletedSponsorshipAssignments, completedSponsorshipAssignmentsData || []);
 
     } catch (error) {
       console.error('Error fetching organization data:', error);
     } finally {
-      setLoading(false);
+      if (!isCancelled()) setLoading(false);
     }
   };
 
