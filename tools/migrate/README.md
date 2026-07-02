@@ -55,8 +55,11 @@ rejects some `item_type` values).
 
 ## TODO before the REAL cutover (not just a dry run)
 
-- **Preserve password hashes.** The export function redacts them, so all users would reset. For the
-  real cutover, export `auth.users` *with* `encrypted_password` (pg_dump path, or extend the function).
+- **Complete the auth export.** The export function omits three things all required for login:
+  `encrypted_password`, `auth.identities`, and `instance_id`. In the dry run, migrated users could
+  NOT sign in until we manually recreated email identities, set `instance_id` to the default, and set
+  a password. For the real cutover, export `auth.users` *with* `encrypted_password` + `instance_id`
+  and export/recreate `auth.identities` (pg_dump path, or extend the export function).
 - **Keyset-paginate big tables** in the export (order by a unique key, not `created_at`) — offset
   paging dropped ~0.9% of `crm_activities`.
 - **Reconcile `admin_audit_logs`** type mismatch and the `admin_daily_checklist` check constraint.
