@@ -805,6 +805,18 @@ async function syncInlineImagesForWordPress(
         cachedMedia.set(getWordPressMediaCacheKey(imageUploadId, null), cacheEntry);
       }
       syncedMedia.push({ id: mediaId, url: mediaUrl, supabaseUrl: mappingSourceUrl, imageUploadId });
+
+      // Persist the mapping (not just the in-memory cache) so a later re-publish or a
+      // retry finds it via loadWordPressMediaMappings instead of re-uploading the same
+      // image and creating duplicate WordPress media. Mirrors the other upload paths;
+      // saveWordPressMediaMapping no-ops when siteId/sourceUrl are missing and dedupes.
+      await saveWordPressMediaMapping(supabase, {
+        siteId: resolvedSiteId,
+        imageUploadId,
+        supabaseImageUrl: mappingSourceUrl,
+        wordpressMediaId: mediaId,
+        wordpressMediaUrl: mediaUrl,
+      });
     }
 
     const editorFigureHtml = buildCanonicalInlineFigureHtml({
