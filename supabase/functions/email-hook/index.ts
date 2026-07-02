@@ -88,23 +88,20 @@ serve(async (req) => {
     // Log secret format info (not the value)
     console.log(`Secret format: length=${hookSecret.length}, starts_with_whsec=${hookSecret.startsWith("whsec_")}, first_char_code=${hookSecret.charCodeAt(0)}`);
 
-    let data: EmailHookPayload;
     const verified = verifyPayload(hookSecret, payload, headers);
-
-    if (verified) {
-      data = verified;
-    } else {
-      // Fallback: parse payload directly and proceed with warning
-      console.warn("⚠️ All webhook verification attempts failed — proceeding without verification to unblock users");
-      try {
-        data = JSON.parse(payload) as EmailHookPayload;
-      } catch {
-        return new Response(
-          JSON.stringify({ error: { http_code: 400, message: "Invalid payload" } }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        );
-      }
+    if (!verified) {
+      // Previously this fell through and sent the email anyway ("to unblock users"),
+      // which let anyone who could reach this URL send auth/reset emails from our
+      // trusted sender with an attacker-controlled redirect_to. Reject instead.
+      // NOTE: SEND_EMAIL_HOOK_SECRET must match the Supabase Auth "Send Email" hook
+      // secret — verify native auth emails (e.g. password reset) on staging before merge.
+      console.error("Webhook signature verification failed — rejecting request.");
+      return new Response(
+        JSON.stringify({ error: { http_code: 401, message: "Invalid webhook signature" } }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
     }
+    const data: EmailHookPayload = verified;
 
     const { user, email_data } = data;
     const { token, token_hash, redirect_to, email_action_type, site_url } = email_data;

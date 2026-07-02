@@ -86,53 +86,29 @@ Deno.serve(async (req) => {
 
     console.log(`Deleting user ${userId} by admin ${caller.id}`);
 
-    // Nullify references in posts
-    await supabaseAdmin
-      .from('posts')
-      .update({ client_id: null })
-      .eq('client_id', userId);
+    // Nullify / delete references BEFORE removing the auth user. Previously each of
+    // these ignored its error, so a failure here would still fall through to the auth
+    // delete and leave orphaned or half-deleted data. Now we check every step and
+    // abort (before the irreversible auth delete) if any fails.
+    const cleanupSteps = [
+      { label: 'posts', error: (await supabaseAdmin.from('posts').update({ client_id: null }).eq('client_id', userId)).error },
+      { label: 'post_assignments', error: (await supabaseAdmin.from('post_assignments').update({ assigned_to: null }).eq('assigned_to', userId)).error },
+      { label: 'email_blasts', error: (await supabaseAdmin.from('email_blasts').update({ client_id: null }).eq('client_id', userId)).error },
+      { label: 'email_sponsorships', error: (await supabaseAdmin.from('email_sponsorships').update({ client_id: null }).eq('client_id', userId)).error },
+      { label: 'user_organizations', error: (await supabaseAdmin.from('user_organizations').delete().eq('user_id', userId)).error },
+      { label: 'user_roles', error: (await supabaseAdmin.from('user_roles').delete().eq('user_id', userId)).error },
+      { label: 'user_notification_preferences', error: (await supabaseAdmin.from('user_notification_preferences').delete().eq('user_id', userId)).error },
+      { label: 'profiles', error: (await supabaseAdmin.from('profiles').delete().eq('id', userId)).error },
+    ];
 
-    // Nullify references in post_assignments
-    await supabaseAdmin
-      .from('post_assignments')
-      .update({ assigned_to: null })
-      .eq('assigned_to', userId);
-
-    // Nullify references in email_blasts
-    await supabaseAdmin
-      .from('email_blasts')
-      .update({ client_id: null })
-      .eq('client_id', userId);
-
-    // Nullify references in email_sponsorships
-    await supabaseAdmin
-      .from('email_sponsorships')
-      .update({ client_id: null })
-      .eq('client_id', userId);
-
-    // Delete user_organizations
-    await supabaseAdmin
-      .from('user_organizations')
-      .delete()
-      .eq('user_id', userId);
-
-    // Delete user_roles
-    await supabaseAdmin
-      .from('user_roles')
-      .delete()
-      .eq('user_id', userId);
-
-    // Delete notification preferences
-    await supabaseAdmin
-      .from('user_notification_preferences')
-      .delete()
-      .eq('user_id', userId);
-
-    // Delete profile
-    await supabaseAdmin
-      .from('profiles')
-      .delete()
-      .eq('id', userId);
+    const failedStep = cleanupSteps.find((s) => s.error);
+    if (failedStep) {
+      console.error(`delete-user: cleanup failed at ${failedStep.label} for ${userId}:`, failedStep.error);
+      return new Response(
+        JSON.stringify({ error: `Could not fully remove the user (failed at ${failedStep.label}). No account was deleted — please retry.` }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Delete from auth.users
     const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(userId);

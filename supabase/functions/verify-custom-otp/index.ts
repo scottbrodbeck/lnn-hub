@@ -37,7 +37,9 @@ serve(async (req) => {
         .eq("token", token)
         .is("used_at", null)
         .gt("expires_at", new Date().toISOString())
-        .single();
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (error || !data) {
         console.error("Token verification failed:", error);
@@ -56,7 +58,9 @@ serve(async (req) => {
         .eq("code", code)
         .is("used_at", null)
         .gt("expires_at", new Date().toISOString())
-        .single();
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (error || !data) {
         console.error("Code verification failed:", error);
@@ -68,11 +72,22 @@ serve(async (req) => {
       otpRecord = data;
     }
 
-    // Mark OTP as used
-    await supabaseAdmin
+    // Atomically consume the code: only flip used_at if it's still null and require
+    // exactly one affected row. Makes codes/links strictly single-use even under
+    // concurrent verify attempts (previously mark-used was a separate unconditional
+    // UPDATE, so the same code/link could be redeemed more than once in its window).
+    const { data: consumed, error: consumeError } = await supabaseAdmin
       .from("otp_codes")
       .update({ used_at: new Date().toISOString() })
-      .eq("id", otpRecord.id);
+      .eq("id", otpRecord.id)
+      .is("used_at", null)
+      .select("id");
+    if (consumeError || !consumed || consumed.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired code" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Generate a magic link. generateLink returns a link for an existing user and
     // (with signups enabled) creates the user if they don't exist — so no separate

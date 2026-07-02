@@ -256,13 +256,15 @@ Deno.serve(async (req) => {
       .from('admin_settings')
       .select('value')
       .eq('key', 'zapier_webhook_url')
-      .single();
+      .maybeSingle();
 
     if (settingsError) {
+      // A real DB/RLS error is NOT the same as "not configured" — surface it so a
+      // dropped admin notification is visible/retriable instead of faking success.
       console.error('Error fetching webhook settings:', settingsError);
       return new Response(
-        JSON.stringify({ success: true, message: 'Webhook not configured' }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, error: 'Failed to read notification settings' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -319,7 +321,14 @@ Deno.serve(async (req) => {
       body: JSON.stringify(zapierPayload)
     });
 
-    console.log(`Webhook sent: ${payload.event_type} - Status: ${response.status}`);
+    // Was: only logged the status number, so a failed Zapier delivery (410 deleted
+    // Zap, 429, 5xx) looked identical to success. Log real failures as errors.
+    if (!response.ok) {
+      const zapierBody = await response.text().catch(() => '');
+      console.error(`Zapier webhook FAILED: ${payload.event_type} - Status ${response.status} ${zapierBody.slice(0, 300)}`);
+    } else {
+      console.log(`Webhook sent: ${payload.event_type} - Status: ${response.status}`);
+    }
 
     // --- Slack notification (non-blocking) ---
     try {

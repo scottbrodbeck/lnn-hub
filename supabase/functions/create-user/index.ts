@@ -86,17 +86,20 @@ Deno.serve(async (req) => {
 
     const primaryOrgId = primaryOrganizationId || (organizationIds?.length > 0 ? organizationIds[0] : null);
 
+    // The on-auth-user-created trigger already inserted this profiles row, so a
+    // second insert always hit a duplicate-PK error (which was only logged),
+    // leaving organization_id unset. Update the trigger-created row instead.
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .insert({
-        id: userData.user.id,
+      .update({
         email: email,
         full_name: fullName,
         organization_id: primaryOrgId,
-      });
+      })
+      .eq('id', userData.user.id);
 
     if (profileError) {
-      console.error('Error creating profile:', profileError);
+      console.error('Error updating profile:', profileError);
     }
 
     const { error: roleError } = await supabaseAdmin
