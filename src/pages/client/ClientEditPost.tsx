@@ -311,6 +311,7 @@ export default function ClientEditPost() {
 
         if (wpError) {
           console.error('WordPress update failed:', wpError);
+          toast.warning('Changes saved, but the WordPress sync failed — the live article may be out of date. An admin will need to re-sync it.');
         } else if (wpResult?.inline_sync_warning) {
           toast.warning(`WordPress updated, but inline image sync needs attention: ${wpResult.inline_sync_warning}`);
         }

@@ -37,7 +37,22 @@ export function useUpdateWonFlow() {
   // Direct update (not useUpdateCrmDeal) so metadata writes don't enqueue
   // redundant HubSpot outbox pushes.
   return async (deal: any, patch: Partial<WonFlowMeta>) => {
-    const currentMeta = (deal?.metadata ?? {}) as Record<string, unknown>;
+    // Re-read the latest metadata immediately before merging. This is a
+    // read-modify-write of the whole JSON column, so using the render-time
+    // `deal.metadata` let two quickly-completed steps clobber each other
+    // (a completed step silently reverting to pending). Re-fetching first
+    // closes almost all of that window without a schema change. (A fully
+    // atomic version would be a jsonb_set RPC — deferred with the DB work.)
+    const { data: fresh, error: readError } = await supabase
+      .from('crm_deals')
+      .select('metadata')
+      .eq('id', deal.id)
+      .single();
+    if (readError) {
+      console.error('won_flow read failed', readError);
+      return;
+    }
+    const currentMeta = ((fresh?.metadata ?? deal?.metadata) ?? {}) as Record<string, unknown>;
     const merged = {
       ...currentMeta,
       won_flow: { ...((currentMeta.won_flow as object) ?? {}), ...patch },

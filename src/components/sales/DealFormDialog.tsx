@@ -52,6 +52,12 @@ export function DealFormDialog({ open, onOpenChange }: Props) {
     }
   }, [form.pipeline_id, form.stage_id, stages]);
 
+  // A contact belongs to a single org — clear the picked contact if the org
+  // changes, so we never submit a deal with a contact from the previous org.
+  useEffect(() => {
+    setForm((f) => (f.primary_contact_id ? { ...f, primary_contact_id: undefined } : f));
+  }, [form.crm_organization_id]);
+
   const setField = <K extends keyof CrmDeal>(k: K, v: CrmDeal[K]) => setForm((f) => ({ ...f, [k]: v }));
   const valid = !!form.title?.trim() && !!form.pipeline_id && !!form.stage_id && !!form.crm_organization_id;
 

@@ -184,9 +184,12 @@ export async function notifyAdminsOfSubmission(
       console.error('[notifyAdminsOfSubmission] Edge function error:', error);
       return { success: false, error: error.message };
     }
+    if (data?.error) {
+      console.error('[notifyAdminsOfSubmission] Edge function returned error:', data.error);
+      return { success: false, error: data.error };
+    }
 
     console.log('[notifyAdminsOfSubmission] Edge function response data:', data);
-    console.log('[notifyAdminsOfSubmission] Webhook notification sent successfully');
     return { success: true };
   } catch (error: any) {
     console.error('[notifyAdminsOfSubmission] Exception caught:', error);

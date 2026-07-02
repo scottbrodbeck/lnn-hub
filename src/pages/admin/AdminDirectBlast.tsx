@@ -257,13 +257,17 @@ export default function AdminDirectBlast() {
 
       // Mark assignment as completed if one was selected
       if (selectedAssignmentId) {
-        await supabase
+        const { error: assignmentError } = await supabase
           .from('post_assignments')
           .update({
             is_completed: true,
             completed_at: new Date().toISOString(),
           })
           .eq('id', selectedAssignmentId);
+        if (assignmentError) {
+          console.error('Failed to mark assignment complete:', assignmentError);
+          toast.warning("Blast created, but couldn't mark the assignment complete — it may still show as an open task.");
+        }
       }
 
       // Create a platform draft only if the site has Beehiiv or Mailchimp configured
@@ -279,9 +283,13 @@ export default function AdminDirectBlast() {
               siteId: selectedSiteId,
             },
           });
-          if (platformError) {
-            console.error(`${platformLabel} draft creation failed:`, platformError);
-            toast.warning(`Email blast created but ${platformLabel} draft creation failed`);
+          // These functions return HTTP 200 with { success:false, error } on real
+          // failures (e.g. a bad/rotated API key), so check the body too — not just
+          // the transport error — or a failed draft looks like success.
+          if (platformError || platformResult?.success === false || platformResult?.error) {
+            const detail = platformResult?.error ?? platformError?.message ?? 'unknown error';
+            console.error(`${platformLabel} draft creation failed:`, detail);
+            toast.warning(`Email blast saved, but the ${platformLabel} draft failed: ${detail}. Check the ${platformLabel} connection for this site.`);
           } else {
             platformUrl = platformResult?.beehiiv_post_url || platformResult?.mailchimp_campaign_url || null;
           }

@@ -67,6 +67,7 @@ export function useTriggerSyncTick() {
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke('crm-hubspot-sync-tick', { body: {} });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error); // function returns 200 + {error} on token/rate failures
       return data;
     },
     onSuccess: () => {
@@ -87,6 +88,7 @@ export function useTriggerPush() {
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke('crm-hubspot-push', { body: {} });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error); // function returns 200 + {error} on token/rate failures
       return data;
     },
     onSuccess: () => {

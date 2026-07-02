@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -58,6 +58,7 @@ export default function AdminDirectPublish() {
   const [selectedSiteId, setSelectedSiteId] = useState<string>('');
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>('');
+  const publishingRef = useRef(false); // synchronous guard against double-submit
   
   // Form state from hook
   const {
@@ -189,13 +190,15 @@ export default function AdminDirectPublish() {
     setAuthorProfiles([]);
     
     if (!selectedOrgId) return;
-    
+
+    let ignore = false;
     const fetchAuthorProfiles = async () => {
       const { data, error } = await supabase
         .from('user_organizations')
         .select('user_id, profiles!user_organizations_user_id_fkey(id, full_name, default_author_name, default_author_bio, default_author_photo_url)')
         .eq('organization_id', selectedOrgId);
-      
+
+      if (ignore) return; // a newer org was selected before this resolved
       if (!error && data) {
         const profiles: AuthorProfile[] = data
           .map((uo: any) => uo.profiles)
@@ -203,8 +206,9 @@ export default function AdminDirectPublish() {
         setAuthorProfiles(profiles);
       }
     };
-    
+
     fetchAuthorProfiles();
+    return () => { ignore = true; };
   }, [selectedOrgId]);
 
   const handleSelectAuthorProfile = (profileId: string | null) => {
@@ -296,6 +300,8 @@ export default function AdminDirectPublish() {
       return;
     }
 
+    if (publishingRef.current) return; // a fast double-click would otherwise publish twice
+    publishingRef.current = true;
     setIsPublishing(true);
 
     try {
@@ -443,6 +449,7 @@ export default function AdminDirectPublish() {
       console.error('Publishing error:', error);
       toast.error('Failed to publish: ' + error.message);
     } finally {
+      publishingRef.current = false;
       setIsPublishing(false);
     }
   };

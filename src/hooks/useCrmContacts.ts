@@ -113,10 +113,11 @@ export function useCreateCrmContact() {
     mutationFn: async (input: Partial<CrmContact>) => {
       const { data: u } = await supabase.auth.getUser();
       if (input.is_primary && input.crm_organization_id) {
-        await supabase
+        const { error: demoteError } = await supabase
           .from('crm_contacts')
           .update({ is_primary: false })
           .eq('crm_organization_id', input.crm_organization_id);
+        if (demoteError) throw demoteError; // don't create a 2nd primary if demotion failed
       }
       const { data, error } = await supabase
         .from('crm_contacts')
@@ -161,11 +162,12 @@ export function useUpdateCrmContact() {
   return useMutation({
     mutationFn: async ({ id, ...patch }: Partial<CrmContact> & { id: string }) => {
       if (patch.is_primary && patch.crm_organization_id) {
-        await supabase
+        const { error: demoteError } = await supabase
           .from('crm_contacts')
           .update({ is_primary: false })
           .eq('crm_organization_id', patch.crm_organization_id)
           .neq('id', id);
+        if (demoteError) throw demoteError; // don't leave two primary contacts if demotion failed
       }
       const { data, error } = await supabase
         .from('crm_contacts')
