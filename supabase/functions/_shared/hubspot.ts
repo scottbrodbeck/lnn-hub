@@ -1,6 +1,8 @@
 // Shared HubSpot API helpers for sync edge functions.
 // Calls the HubSpot CRM API directly (was the Lovable connector gateway).
-// HUBSPOT_API_KEY holds a HubSpot Private App access token (pat-...).
+// HUBSPOT_API_KEY holds a HubSpot Bearer credential — a Service Key (recommended) or a
+// Private App access token (pat-...). Both authenticate the same way (Authorization
+// header), so either drops in with no code change.
 
 export const GATEWAY_URL = "https://api.hubapi.com";
 
@@ -43,7 +45,7 @@ export async function hsFetch<T = any>(
 ): Promise<T> {
   const HUBSPOT_API_KEY = Deno.env.get("HUBSPOT_API_KEY");
   if (!HUBSPOT_API_KEY) {
-    throw new Error("HUBSPOT_API_KEY not configured (HubSpot private app token)");
+    throw new Error("HUBSPOT_API_KEY not configured (HubSpot Service Key or private app token)");
   }
 
   // Retry up to 3x on 429/5xx with exponential backoff (1s, 3s, 9s).
