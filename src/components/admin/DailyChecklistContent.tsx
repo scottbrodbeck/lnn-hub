@@ -479,6 +479,7 @@ export function DailyChecklistContent({ onUncheckedCountChange }: DailyChecklist
           }
         } catch (e) {
           console.error('Failed to propagate completion to assignment:', e);
+          toast.warning("Checklist item updated, but the linked assignment status couldn't be updated.");
         }
       }
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -380,10 +380,15 @@ export default function ClientDisplayAds() {
     createAd,
   } = useBroadstreetAds();
 
+  // Bumped on each fetch so a slow response for a previously-selected org can't
+  // overwrite the current org's campaigns (out-of-order response race).
+  const campaignsFetchSeq = useRef(0);
+
   // Fetch local campaigns from database
   const fetchLocalCampaigns = useCallback(async () => {
     if (!activeOrganizationId) return;
-    
+    const seq = ++campaignsFetchSeq.current;
+
     try {
       const { data, error } = await supabase
         .from('display_ad_campaigns')
@@ -395,15 +400,17 @@ export default function ClientDisplayAds() {
         .eq('organization_id', activeOrganizationId)
         .eq('is_active', true)
         .order('start_date', { ascending: false });
-      
+
+      if (seq !== campaignsFetchSeq.current) return; // superseded by a newer org fetch
       if (error) throw error;
       setLocalCampaigns(data || []);
       setCampaignsError(null);
     } catch (err) {
+      if (seq !== campaignsFetchSeq.current) return;
       console.error('Error fetching local campaigns:', err);
       setCampaignsError(err instanceof Error ? err.message : 'Failed to load campaigns');
     } finally {
-      setIsLoadingCampaigns(false);
+      if (seq === campaignsFetchSeq.current) setIsLoadingCampaigns(false);
     }
   }, [activeOrganizationId]);
 

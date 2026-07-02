@@ -420,13 +420,17 @@ export default function ClientSubmitBlast() {
 
         // Mark assignment completed
         if (selectedAssignmentId) {
-          await supabase
+          const { error: assignmentError } = await supabase
             .from('post_assignments')
             .update({
               is_completed: true,
               completed_at: new Date().toISOString(),
             })
             .eq('id', selectedAssignmentId);
+          if (assignmentError) {
+            console.error('Failed to mark assignment complete:', assignmentError);
+            toast.warning("Blast submitted, but the assignment status couldn't be updated — it may still show as open.");
+          }
         }
 
         // Notify admins
@@ -544,10 +548,14 @@ export default function ClientSubmitBlast() {
 
         // Mark assignment completed
         if (selectedAssignmentId) {
-          await supabase
+          const { error: assignmentError } = await supabase
             .from('post_assignments')
             .update({ is_completed: true, completed_at: new Date().toISOString() })
             .eq('id', selectedAssignmentId);
+          if (assignmentError) {
+            console.error('Failed to mark assignment complete:', assignmentError);
+            toast.warning("Blast sent, but the assignment status couldn't be updated — it may still show as open.");
+          }
         }
 
         // Notify admins

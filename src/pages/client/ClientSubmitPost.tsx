@@ -592,7 +592,10 @@ export default function ClientSubmitPost() {
       }
       if (selectedAssignments.length > 0 && postId) {
         const result = await completeAssignmentsForPost(supabase, selectedAssignments, postId);
-        if (!result.success) { console.error('Errors completing assignments:', result.errors); }
+        if (!result.success) {
+          console.error('Errors completing assignments:', result.errors);
+          toast.warning("Post submitted, but the assignment status couldn't be fully updated — it may still show as open.");
+        }
       }
       if (postId && selectedAssignments.length > 0) {
         try {
