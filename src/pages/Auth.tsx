@@ -239,6 +239,13 @@ export default function Auth() {
           </div>
         </CardHeader>
         <CardContent>
+          {/* TEMPORARY: password-reset migration notice — remove after go-live cutover */}
+          {authMode === 'login' && (
+            <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+              Passwords have been reset for all users. Please use a one-time code
+              (“Email me a code”) or click “Forgot Password?” to set a new password.
+            </div>
+          )}
           {authMode === 'login' && (
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
