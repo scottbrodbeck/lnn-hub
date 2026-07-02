@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { enqueueOutbox } from './useOutboxEnqueue';
 import { mapNoteToHs, mapTaskToHs } from '@/lib/hubspotMappers';
+import { fetchAllRows } from '@/lib/supabasePaginate';
 
 export type CrmActivityType = 'call' | 'meeting' | 'task' | 'email' | 'note';
 
@@ -71,37 +72,44 @@ export function useCrmActivities(filters: ActivitiesFilters = {}) {
   return useQuery({
     queryKey: ['crm', 'activities', filters],
     queryFn: async (): Promise<CrmActivityRow[]> => {
-      let q = supabase.from('crm_activities').select(SELECT).order('due_at', { ascending: true, nullsFirst: false });
-      if (filters.type) q = q.eq('type', filters.type as any);
-      if (filters.ownerId) q = q.eq('owner_user_id', filters.ownerId);
-      if (filters.dealId) q = q.eq('deal_id', filters.dealId);
-      if (filters.organizationId) q = q.eq('crm_organization_id', filters.organizationId);
-      if (filters.contactId) q = q.eq('contact_id', filters.contactId);
-
       const now = new Date();
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
 
-      switch (filters.scope) {
-        case 'overdue':
-          q = q.is('completed_at', null).lt('due_at', startOfToday);
-          break;
-        case 'today':
-          q = q.is('completed_at', null).gte('due_at', startOfToday).lt('due_at', startOfTomorrow);
-          break;
-        case 'upcoming':
-          q = q.is('completed_at', null).gte('due_at', startOfTomorrow);
-          break;
-        case 'completed': {
-          const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-          q = q.not('completed_at', 'is', null).gte('completed_at', since);
-          break;
-        }
-      }
+      // Page through all matching rows — a bare .select() silently truncates the list
+      // at PostgREST's 1000-row cap. Secondary .order('id') makes paging deterministic
+      // (due_at has ties and nulls).
+      const rows = await fetchAllRows((fromRow, toRow) => {
+        let q = supabase
+          .from('crm_activities')
+          .select(SELECT)
+          .order('due_at', { ascending: true, nullsFirst: false })
+          .order('id', { ascending: true });
+        if (filters.type) q = q.eq('type', filters.type as any);
+        if (filters.ownerId) q = q.eq('owner_user_id', filters.ownerId);
+        if (filters.dealId) q = q.eq('deal_id', filters.dealId);
+        if (filters.organizationId) q = q.eq('crm_organization_id', filters.organizationId);
+        if (filters.contactId) q = q.eq('contact_id', filters.contactId);
 
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data ?? []).map(mapRow);
+        switch (filters.scope) {
+          case 'overdue':
+            q = q.is('completed_at', null).lt('due_at', startOfToday);
+            break;
+          case 'today':
+            q = q.is('completed_at', null).gte('due_at', startOfToday).lt('due_at', startOfTomorrow);
+            break;
+          case 'upcoming':
+            q = q.is('completed_at', null).gte('due_at', startOfTomorrow);
+            break;
+          case 'completed': {
+            const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+            q = q.not('completed_at', 'is', null).gte('completed_at', since);
+            break;
+          }
+        }
+        return q.range(fromRow, toRow);
+      });
+      return rows.map(mapRow);
     },
   });
 }
